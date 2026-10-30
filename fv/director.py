@@ -10,6 +10,7 @@ import datetime as _dt
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -39,8 +40,80 @@ def queue_prompt(graph: dict, url: str | None = None, client_id: str = "oneshot-
     data = json.dumps(body).encode()
     req = urllib.request.Request((url or server_url()) + "/prompt", data=data,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read().decode()).get("prompt_id", "")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.loads(r.read().decode()).get("prompt_id", "")
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(_refusal(e)) from None
+
+
+def _refusal(e) -> str:
+    """ComfyUI's reason for refusing a job (its node_errors), not just 'HTTP Error 400'."""
+    try:
+        j = json.loads(e.read().decode())
+    except Exception:
+        return f"ComfyUI refused the job ({e})"
+    lines = []
+    for n in (j.get("node_errors") or {}).values():
+        for err in n.get("errors", []):
+            lines.append(f"{n.get('class_type', '?')}: {err.get('details') or err.get('message', '')}")
+    if not lines:
+        err = j.get("error") or {}
+        lines.append(err.get("details") or err.get("message") or str(e) if isinstance(err, dict) else str(err))
+    lines = list(dict.fromkeys(lines))
+    more = f" (and {len(lines) - 4} more)" if len(lines) > 4 else ""
+    return "ComfyUI refused the job: " + "; ".join(lines[:4]) + more
+
+
+def check_graphs(gs: list[dict]) -> None:
+    """Raise a readable error if ComfyUI would refuse any of these jobs (a node pack that didn't
+    load, a model file or option it doesn't have), before any is queued: a chain that fails part
+    way leaves its first jobs queued, e.g. an assembly of a run with no renders."""
+    try:
+        import nodes as comfy_nodes  # ComfyUI's registry (absent outside ComfyUI: the server checks)
+    except Exception:
+        return
+    no_node, no_file, no_opt, specs = {}, set(), set(), {}
+    for g in gs:
+        for n in g.values():
+            ct = n.get("class_type") if isinstance(n, dict) else None
+            cls = comfy_nodes.NODE_CLASS_MAPPINGS.get(ct) if ct else None
+            if ct and cls is None:
+                no_node[ct] = 1
+                continue
+            if not ct:
+                continue
+            if ct not in specs:
+                try:
+                    it = cls.INPUT_TYPES()
+                    specs[ct] = {**it.get("required", {}), **it.get("optional", {})}
+                except Exception:
+                    specs[ct] = {}
+                if hasattr(cls, "VALIDATE_INPUTS"):  # the node checks its own values
+                    specs[ct] = {}
+            for k, v in (n.get("inputs") or {}).items():
+                s = specs[ct].get(k)
+                if not isinstance(v, str) or not s:
+                    continue
+                opts = s[0] if isinstance(s[0], list) else (
+                    s[1].get("options") if s[0] == "COMBO" and len(s) > 1 and isinstance(s[1], dict) else None)
+                if opts is not None and v not in opts:
+                    if v.lower().endswith(graphs.MODEL_EXT):
+                        no_file.add(os.path.basename(v.replace("\\", "/")))
+                    else:
+                        no_opt.add(f"{ct} {k} '{v}'")
+    if not (no_node or no_file or no_opt):
+        return
+    parts = []
+    if no_file:
+        f = sorted(no_file)
+        parts.append(f"model files not installed: {', '.join(f[:6])}" + (f" and {len(f) - 6} more" if len(f) > 6 else "")
+                     + " (the README lists the downloads)")
+    if no_node:
+        parts.append(f"nodes not loaded: {', '.join(sorted(no_node))} (look for 'IMPORT FAILED' in the ComfyUI console)")
+    if no_opt:
+        parts.append(f"options this ComfyUI doesn't offer: {', '.join(sorted(no_opt)[:4])}")
+    raise RuntimeError("ComfyUI can't run this yet, nothing was queued. " + "; ".join(parts) + ".")
 
 
 def _node_available(name: str) -> bool:
@@ -54,6 +127,7 @@ def _node_available(name: str) -> bool:
 def queue_chain_front(graphs: list[dict], url: str | None = None) -> list[str]:
     """Queue graphs at the front of the queue so they run next, in the given order (follow-ups
     of a run finish before the next run's renders start)."""
+    check_graphs(graphs)
     ids = [queue_prompt(g, url, front=True) for g in reversed(graphs)]
     return ids[::-1]
 

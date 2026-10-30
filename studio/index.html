@@ -863,7 +863,9 @@ async function viewBrief(){
     if (use === "full" && r.vram_gb && r.vram_gb < r.full_min_gb) t += " The full models want 48 GB or more, so this may be slow or run out of memory.";
     const miss = (r.missing || {})[use] || [];
     if (miss.length) t += ` Missing ${miss.length === 1 ? "one file" : miss.length + " files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`;
-    $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!miss.length);
+    const packs = r.missing_packs || [];
+    if (packs.length) t += ` ${packs.join(", ")} didn't load in ComfyUI (look for IMPORT FAILED in its console), so nothing can render.`;
+    $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!(miss.length || packs.length));
   };
   drawModels();
   if (S.models) drawModels(); else api("models").then(r => { S.models = r; if ($("#mset")) drawModels(); }).catch(() => { S.models = null; });
@@ -1040,7 +1042,7 @@ async function start(render, briefOverride){
         overlay(); location.hash = (render ? "#/render/" : "#/plan/") + encodeURIComponent(j.run); return;
       }
     }
-  }catch(e){ overlay(); toast("It didn't start: " + e.message, 9000); }
+  }catch(e){ overlay(); toast("It didn't start: " + e.message, 20000); }
 }
 
 // ---------------------------------------------------------------- 2. The Plan

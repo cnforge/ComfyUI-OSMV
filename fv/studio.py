@@ -874,6 +874,7 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
     chain += [graphs.free_memory("before pickup clips").nodes] + clips
     chain += [graphs.free_memory("before assembly").nodes,
               graphs.assemble(run_dir=d, prefix=rel).nodes]
+    director.check_graphs(chain)  # before the plan records the pickup
     est = (3.0 + 0.5 * len(stills) if stills else 0.0) + 2.0 + 1.2 * len(clips) + \
         1.0 + 0.035 * float(p.get("duration") or 30)
     p.setdefault("pickups", []).append({"n": k, "at": _dt.datetime.now().isoformat(timespec="seconds"),
@@ -970,6 +971,7 @@ def _sharpen(name: str, dry: bool = False) -> dict:
         shutil.copy2(done["video"], os.path.join(d, "versions", f"v{nv}_{os.path.basename(done['video'])}"))
     chain = [graphs.free_memory("before re-decoding").nodes] + clips + \
         [graphs.free_memory("before assembly").nodes, graphs.assemble(run_dir=d, prefix=rel).nodes]
+    director.check_graphs(chain)  # before the plan records the pass
     p.setdefault("pickups", []).append({"n": k, "kind": "sharpen", "at": _dt.datetime.now().isoformat(timespec="seconds"),
                                         "t": time.time(), "items": changes, "estimate_min": round(est, 1)})
     json.dump(p, open(pj, "w", encoding="utf-8"), indent=1)
@@ -1235,6 +1237,10 @@ async def _api(request: web.Request, route: str) -> web.Response:
             if not body.get("song"):
                 return web.json_response({"error": "pick a song first"}, status=400)
             _song_path(body["song"])
+            if body.get("render"):  # refuse now, not after minutes of planning
+                why = await _blocking(lambda: _fv("graphs").not_ready(body.get("models") or "auto"))
+                if why:
+                    return web.json_response({"error": f"Can't render on this ComfyUI yet: {why}."}, status=400)
             try:
                 est = await _blocking(_estimate, body)
             except Exception as e:

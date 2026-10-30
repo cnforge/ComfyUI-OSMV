@@ -121,12 +121,39 @@ def pick_models(requested: str | None = "auto") -> str:
     return "24gb"
 
 
+RUN_NODES = {"ClownsharKSampler_Beta": "RES4LYF"}  # other packs' nodes a default run needs
+
+
+def missing_nodes() -> list:
+    """The packs a default run needs that didn't load in this ComfyUI ([] outside ComfyUI)."""
+    try:
+        import nodes as comfy_nodes  # type: ignore
+    except Exception:
+        return []
+    return sorted({p for n, p in RUN_NODES.items() if n not in comfy_nodes.NODE_CLASS_MAPPINGS})
+
+
+def not_ready(requested: str | None = "auto") -> str:
+    """Why a render with this model set can't run here ('' when it can)."""
+    name = pick_models(requested)
+    files, packs = missing_files(name), missing_nodes()
+    why = []
+    if files:
+        why.append(f"the {'full' if name == 'full' else '24 GB'} model set is missing {len(files)} "
+                   f"file{'s' if len(files) > 1 else ''} ({', '.join(files[:3])}"
+                   f"{f' and {len(files) - 3} more' if len(files) > 3 else ''}; the README lists the downloads)")
+    if packs:
+        why.append(f"{', '.join(packs)} didn't load (look for 'IMPORT FAILED' in the ComfyUI console)")
+    return "; ".join(why)
+
+
 def models_report() -> dict:
-    """For the Studio: the GPU's memory, the set "auto" picks, and the missing files of each set."""
+    """For the Studio: the GPU's memory, the set "auto" picks, the missing files of each set and
+    the node packs that didn't load."""
     idx = _model_index()
     return {"vram_gb": round(vram_gb(), 1), "reserved_gb": round(reserved_gb(), 1),
             "auto": pick_models("auto"), "full_min_gb": FULL_MIN_GB,
-            "missing": {n: missing_files(n, idx) for n in MODEL_SETS}}
+            "missing": {n: missing_files(n, idx) for n in MODEL_SETS}, "missing_packs": missing_nodes()}
 
 
 def use_models(name: str | None = "auto") -> str:
