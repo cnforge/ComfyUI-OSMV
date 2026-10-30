@@ -91,15 +91,18 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
 .drop{border:1.5px dashed var(--line3);border-radius:14px;padding:28px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;cursor:pointer}
 .drop.over{border-color:var(--accent);background:var(--accent-bg)}
-.wave{position:relative;margin-top:32px;height:112px;cursor:pointer;user-select:none}
+.wave{position:relative;margin-top:32px;height:112px;cursor:pointer;user-select:none;touch-action:none}
 .wave .bars{display:flex;align-items:center;gap:2px;height:112px}
 .wave .bars span{flex:1 1 0;min-width:0;border-radius:2px}
 .wave .win{position:absolute;top:-6px;bottom:-6px;border:2px solid var(--text);border-radius:8px;background:rgba(255,255,255,.05)}
 .wave .win::before,.wave .win::after{content:"";position:absolute;top:50%;margin-top:-14px;width:8px;height:28px;border-radius:4px;background:var(--text)}
 .wave .win::before{left:-5px}.wave .win::after{right:-5px}
+.wave .win.drag{cursor:grab}.wave.dragging,.wave.dragging .win.drag{cursor:grabbing}
+.wave .win:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .wave .wl{position:absolute;top:-28px;font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap}
 .wave .win .ring{display:none}
-.wave .ph{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--accent);box-shadow:0 0 6px rgba(200,255,61,.8);display:none}
+.wave .ph{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--accent);box-shadow:0 0 6px rgba(200,255,61,.8);display:none;pointer-events:none}
+.wave .ph::after{content:attr(data-t);position:absolute;top:6px;left:6px;padding:1px 5px;border-radius:4px;background:rgba(0,0,0,.7);color:#fff;font:600 11px var(--mono);white-space:nowrap}
 .ticks{position:relative;height:18px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--dim)}
 .ticks span{position:absolute}
 .legend{display:flex;gap:14px;font-size:13px;color:var(--muted);flex-wrap:wrap}
@@ -755,7 +758,7 @@ async function viewBrief(){
         <span style="margin-left:auto" class="row"><button class="btn sm hide" id="playbtn" type="button">Play this part</button><button class="btn sm hide" id="replace" type="button">New song</button></span></div>
       <div id="songpick"></div>
       <div id="songwave" class="hide">
-        <div class="wave" id="wave" title="Click to start the video there"><div class="bars" id="bars" aria-hidden="true"></div><div class="win" id="win" role="img"><i class="ring" aria-hidden="true"></i></div><div class="wl" id="wl"></div><div class="ph" id="ph"></div></div>
+        <div class="wave" id="wave"><div class="bars" id="bars" aria-hidden="true"></div><div class="win" id="win" tabindex="0"><i class="ring" aria-hidden="true"></i></div><div class="wl" id="wl"></div><div class="ph" id="ph"></div></div>
         <div class="ticks" id="ticks" aria-hidden="true"></div>
         <div class="row" style="margin-top:14px">
           <div class="legend"><span><i style="background:var(--low)"></i>Low energy: intro, quiet bridges</span><span><i style="background:var(--mid)"></i>Medium energy: verses, builds</span><span><i style="background:var(--high)"></i>High energy: choruses, drops</span></div>
@@ -942,13 +945,24 @@ function drawWave(){
   $("#songwave").classList.remove("hide");
   const n = a.env.length, d = a.duration;
   const levelAt = t => { const s = a.sections.find(x => t >= x.start && t < x.end); return s ? s.level : "medium"; };
-  const [w0, w1] = a.window;
-  $("#bars").innerHTML = a.env.map((v,i) => { const t = (i + 0.5) / n * d; const inWin = t >= w0 && t <= w1;
-    return `<span style="height:${Math.max(6, Math.round(10 + v * 100))}px;background:${LEVEL_COL[levelAt(t)]};opacity:${inWin ? 1 : .38}"></span>`; }).join("");
-  const L = w0 / d * 100, W = (w1 - w0) / d * 100;
-  Object.assign($("#win").style, {left: L + "%", width: W + "%"});
-  $("#win").setAttribute("aria-label", `The part of the song in the video: ${clock(w0)} to ${clock(w1)}`);
-  Object.assign($("#wl").style, {left: L + "%"}); $("#wl").textContent = `${clock(w0)} – ${clock(w1)}`;
+  const [w0, w1] = a.window, len = w1 - w0, movable = +b.seconds > 0;
+  $("#bars").innerHTML = a.env.map((v,i) => `<span style="height:${Math.max(6, Math.round(10 + v * 100))}px;background:${LEVEL_COL[levelAt((i + 0.5) / n * d)]}"></span>`).join("");
+  const wave = $("#wave"), win = $("#win"), wl = $("#wl"), bars = [...$("#bars").children];
+  // the box at song time s: drawn live while it's dragged, then the server moves it to a bar line
+  const place = s => {
+    const L = s / d * 100;
+    Object.assign(win.style, {left: L + "%", width: len / d * 100 + "%"});
+    wl.style.left = L + "%"; wl.textContent = `${clock(s)} – ${clock(s + len)}`;
+    bars.forEach((el, i) => { const t = (i + 0.5) / n * d; el.style.opacity = t >= s && t <= s + len ? 1 : .38; });
+  };
+  place(w0);
+  win.classList.toggle("drag", movable);
+  win.setAttribute("role", movable ? "slider" : "img");
+  win.setAttribute("aria-label", movable ? "The part of the song in the video. Left and right arrows move it a bar, Enter plays it"
+                                         : `The part of the song in the video: ${clock(w0)} to ${clock(w1)}`);
+  if (movable) win.setAttribute("aria-valuetext", `${clock(w0)} to ${clock(w1)}`);
+  wave.title = movable ? "Drag the box to move the part in the video. Click or drag anywhere else to listen from there; double-click to start the video there."
+                       : "Click or drag to listen from there";
   const tk = []; const step = d > 240 ? 60 : 30;
   for (let t = 0; t < d - step * .4; t += step) tk.push(`<span style="left:${t/d*100}%">${clock(t)}</span>`);
   tk.push(`<span style="right:0">${clock(d)}</span>`);
@@ -958,18 +972,60 @@ function drawWave(){
     + `<button type="button" class="opt" id="auto" aria-pressed="${+b.start<0}" title="Let OneShot MV pick the strongest part">Auto</button>`;
   $("#lens").querySelectorAll("[data-l]").forEach(el => el.onclick = () => { b.seconds = +el.dataset.l; saveBrief(); drawSong(); viewBriefTiersRefresh(); });
   $("#auto").onclick = () => { b.start = -1; saveBrief(); drawSong(); };
-  $("#winnote").textContent = +b.start < 0 ? (+b.seconds > 0 ? "Picked for you: the strongest stretch, with the drop or chorus early on. Click the waveform to start somewhere else." : "The whole song.")
-    : `Starts at ${clock(b.start)} (moved back to the nearest bar line). Auto lets OneShot MV pick.`;
-  $("#wave").onclick = e => { if (+b.seconds <= 0) return; const r = e.currentTarget.getBoundingClientRect(); b.start = Math.max(0, Math.round(((e.clientX - r.left) / r.width) * d * 100) / 100); saveBrief(); drawSong(); };
-  // play the chosen part
+  $("#winnote").textContent = (+b.start < 0 ? (movable ? "Picked for you: the strongest stretch, with the drop or chorus early on. Drag the box to start somewhere else." : "The whole song.")
+    : `Starts at ${clock(w0)} (moved to the nearest bar line). Auto lets OneShot MV pick.`) + " Click or drag the waveform to listen from anywhere.";
+  // listening: "Play this part" plays the box and stops at its end; a click or drag anywhere else
+  // plays the song from there (scrubbing). S.analysis, not this draw's window: a drag redraws.
   const au = $("#audio"), pb = $("#playbtn"), ph = $("#ph");
   pb.classList.remove("hide");
-  if (au.dataset.src !== a.url){ au.src = a.url; au.dataset.src = a.url; }
+  if (au.dataset.src !== a.url){ au.src = a.url; au.dataset.src = a.url; S.playSel = false; }
   pb.textContent = au.paused ? "Play this part" : "Stop";
-  pb.onclick = () => { if (!au.paused){ au.pause(); return; } au.currentTime = w0; au.play().catch(()=>toast("The browser couldn't play this file.")); };
-  au.onplay = () => { pb.textContent = "Stop"; ph.style.display = "block"; };
-  au.onpause = () => { pb.textContent = "Play this part"; ph.style.display = "none"; };
-  au.ontimeupdate = () => { ph.style.left = (au.currentTime / d * 100) + "%"; if (au.currentTime >= w1) au.pause(); };
+  const play = () => au.play().catch(() => toast("The browser couldn't play this file."));
+  const showPh = t => { ph.style.display = "block"; ph.style.left = (t / d * 100) + "%"; ph.dataset.t = clock(t); };
+  const playPart = () => { S.playSel = true; au.currentTime = S.analysis.window[0]; showPh(au.currentTime); play(); };
+  const listen = t => { S.playSel = false; au.currentTime = t; showPh(t); if (au.paused) play(); };
+  const tick = () => {
+    if (S.playSel && au.currentTime >= S.analysis.window[1]) au.pause();
+    showPh(au.currentTime);
+    if (!au.paused) requestAnimationFrame(tick);
+  };
+  pb.onclick = () => au.paused ? playPart() : au.pause();
+  au.onplay = () => { pb.textContent = "Stop"; requestAnimationFrame(tick); };
+  au.onpause = () => { pb.textContent = "Play this part"; };
+  au.ontimeupdate = null;
+  if (!au.paused || au.currentTime > 0) showPh(au.currentTime);
+  const moveTo = s => {  // a new start for the box; keeps playing the part if it was
+    const again = !au.paused && S.playSel;
+    b.start = Math.round(Math.min(Math.max(s, 0), d - len) * 100) / 100; saveBrief();
+    drawSong().then(() => { if (again) playPart(); });
+  };
+  const at = e => { const r = wave.getBoundingClientRect(); return Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1) * d; };
+  wave.onpointerdown = e => {
+    if (e.button !== 0) return;
+    e.preventDefault(); wave.setPointerCapture(e.pointerId);
+    const onWin = movable && win.contains(e.target), t0 = at(e);
+    let s = w0, moved = false;
+    if (onWin){ wave.classList.add("dragging"); win.focus({preventScroll: true}); } else listen(t0);
+    wave.onpointermove = m => {
+      if (!onWin){ listen(at(m)); return; }
+      s = Math.min(Math.max(w0 + at(m) - t0, 0), d - len);
+      moved = moved || Math.abs(at(m) - t0) > d / 500;
+      place(s);
+    };
+    wave.onpointerup = wave.onpointercancel = () => {
+      wave.onpointermove = wave.onpointerup = wave.onpointercancel = null;
+      wave.classList.remove("dragging");
+      if (moved) moveTo(s);
+    };
+  };
+  wave.ondblclick = e => { if (movable && !win.contains(e.target)) moveTo(at(e)); };
+  win.onkeydown = e => {
+    if (e.key === "Enter" || e.key === " "){ e.preventDefault(); au.paused ? playPart() : au.pause(); return; }
+    if (!movable || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    const bar = 4 * 60 / (a.tempo || 120) * (e.shiftKey ? 4 : 1);
+    moveTo(w0 + (e.key === "ArrowRight" ? bar : -bar));
+  };
 }
 function viewBriefTiersRefresh(){ const b = S.brief; const tiers = $("#tiers"); if (!tiers) return;
   tiers.querySelectorAll(".tier").forEach(el => { const e = estimate(Object.assign({}, b, {preset: el.dataset.q})); el.querySelector(".eta").textContent = "≈ " + mins(e); });
