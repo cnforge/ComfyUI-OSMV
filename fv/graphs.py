@@ -166,13 +166,23 @@ def use_models(name: str | None = "auto") -> str:
     return name
 
 
-def _have_sage() -> bool:
-    """SageAttention is optional: without the package the LTX jobs skip the patch."""
+SAGE_FUNCS = {"auto": "sageattn", "sageattn_qk_int8_pv_fp8_cuda++": "sageattn_qk_int8_pv_fp8_cuda"}
+
+
+def _sage_mode(want: str) -> str:
+    """The SageAttention kernel the LTX jobs can use: the one asked for if this install has it, else
+    'auto', else '' (no patch; also when none is asked for). SageAttention is optional, and 1.x only
+    has 'auto': asking it for a 2.x kernel failed every clip with an ImportError."""
+    if not want or want == "disabled":
+        return ""
     try:
-        import importlib.util
-        return importlib.util.find_spec("sageattention") is not None
+        import sageattention  # type: ignore
     except Exception:
-        return False
+        return ""
+    for mode in (want, "auto"):
+        if mode and hasattr(sageattention, SAGE_FUNCS.get(mode, mode)):
+            return mode
+    return ""
 
 
 M: dict = {}
@@ -276,8 +286,9 @@ def _ram_backups(g, model):
 def _ltx23(g, union=False):
     ck = g.add("CheckpointLoaderSimple", ckpt_name=M["ltx23_ckpt"])
     model = _ram_backups(g, O(ck, 0))
-    if M.get("ltx23_sage") and _have_sage():
-        model = O(g.add("PathchSageAttentionKJ", model=model, sage_attention=M["ltx23_sage"],
+    sage = _sage_mode(M.get("ltx23_sage") or "")
+    if sage:
+        model = O(g.add("PathchSageAttentionKJ", model=model, sage_attention=sage,
                         allow_compile=False))
     for name, st in M["ltx23_loras"]:
         model = O(g.add("LoraLoaderModelOnly", model=model, lora_name=name, strength_model=st))
