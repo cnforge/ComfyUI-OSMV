@@ -50,8 +50,11 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
    drag anywhere to listen from there. Optionally add a **Character** photo: every singer
    becomes that person, dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
-   Pick a length, a World (four examples, or write your own) and a format. The buttons say how
-   long the plan and the video will take.
+   Pick a length, a World (four examples, or write your own) and the output (format and
+   quality). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
+   close-ups only, crowd, cast order, seed), the take check's retries and the model versions.
+   The project name is optional (the song's title otherwise). The buttons say how long the plan
+   and the video will take.
 2. **The Plan.** The World the tool wrote and every shot (when, what energy, who, wearing what,
    where), before anything long renders. Change the World and plan again, or make the video.
 3. **Rendering.** The stages (plan, stills, vision check, clips, take check, b-roll, edit), a
@@ -73,9 +76,8 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
 5. **Your videos** lists every run, whether it came from the Studio, the workflow or the SDK.
 
 Every video starts with FX on Subtle, no color grade (a natural base grade is always applied),
-grain at 25% and the finest size, and no vignette. The project name is used for the run folder
-and the downloaded files. The Look menu in the top bar switches the Studio between four color
-palettes.
+grain at 25% and the finest size, and no vignette. Apply and re-shoots keep the cut before
+as a version. The project name is used for the run folder and the downloaded files.
 
 To click through every screen on a finished video without rendering anything, open
 http://127.0.0.1:8188/oneshot-mv/?demo. Starting a video, rendering, Apply and re-shoots are
@@ -230,7 +232,7 @@ about every beat on intense.
 
 The default model set is made for 24 GB GPUs (RTX 3090, 4090 or 5090) and wants at least 64 GB of
 system RAM, because ComfyUI keeps part of LTX-2.3 in RAM while it renders. The full set wants a
-GPU with 48 GB or more. Model Versions in the Studio's Quality box, the Director's `models`
+GPU with 48 GB or more. Model versions under the Studio's Advanced, the Director's `models`
 setting and `sdk_run.py --models` choose the set. Auto uses the full set on a 48 GB+ GPU when its
 files are installed, and the 24 GB set otherwise; memory set aside with `--reserve-vram` counts
 against the card. The Studio also lists any files the chosen set is missing.
@@ -268,7 +270,7 @@ Each run has its own folder, `output/oneshot-mv/runs/<run>/`, with:
 - No OneShot MV button or page: restart ComfyUI once after installing, and look in the console
   for import errors from the pack.
 - "Model not found" or "Value not in list": a file of the chosen model set is missing. The
-  line under Model Versions in the Studio lists the missing files; download them, or pick the
+  line under Model versions (the Brief's Advanced) lists the missing files; download them, or pick the
   other set.
 - The lip-sync or framing checks were skipped: their weights aren't installed (Install, step 4).
   The video is still made.

@@ -1,18 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-look="neon">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OneShot MV Studio</title>
 <link rel="icon" id="fav" href="data:,">
-<script>
-// the Studio's look: the Neon layout in one of four palettes (a gradient with matching surfaces).
-// ?pal=neon|sunset|aurora|ember or the Look menu switches; the choice is remembered in this browser.
-(function(){ var P = ["neon","sunset","aurora","ember"], l = "neon";
-  try{ var q = new URLSearchParams(location.search).get("pal"); if (P.indexOf(q) >= 0) localStorage.setItem("osmv.pal", q); l = localStorage.getItem("osmv.pal") || "neon"; }catch(e){}
-  if (P.indexOf(l) < 0) l = "neon";
-  document.documentElement.setAttribute("data-look", "neon"); document.documentElement.setAttribute("data-pal", l); })();
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -332,7 +324,6 @@ html[data-look="neon"] .shotlist tr:hover td{background:var(--panel2)}
 html[data-look="neon"] .emap{border-radius:3px;height:12px;gap:3px}
 html[data-look="neon"] .lvl{font-size:12px;letter-spacing:.08em}
 html[data-look="neon"] .lvl i{border-radius:2px}
-html[data-look="neon"] .looksw{font-family:var(--mono)}
 
 /* result: shots, fix panel, refine column */
 .strip.big{grid-auto-columns:minmax(92px,1fr)}
@@ -341,6 +332,13 @@ html[data-look="neon"] .looksw{font-family:var(--mono)}
 .strip .sn{position:absolute;left:3px;top:3px;font:600 10px/1 var(--mono);background:rgba(8,10,13,.7);color:#fff;border-radius:4px;padding:2px 4px}
 .strip .fixhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.04em;color:#fff;background:rgba(8,10,13,.55);opacity:0;transition:opacity .12s}
 .strip button:hover .fixhint,.strip button:focus-visible .fixhint{opacity:1}
+.strip .lk{position:absolute;left:4px;bottom:4px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:rgba(8,10,13,.7);color:#fff;pointer-events:none}
+.worldmore summary{display:flex;align-items:baseline;gap:12px;cursor:pointer;list-style:none}
+.worldmore summary::-webkit-details-marker{display:none}
+.worldmore .wl1{flex:1;min-width:0;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.worldmore summary::after{content:"Show more";font-size:12px;font-weight:700;color:var(--text);flex:none}
+.worldmore[open] summary::after{content:"Show less"}
+.worldmore[open] .wl1{display:none}
 .takepicks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
 .takepick{position:relative;width:104px;padding:0;border:2px solid var(--line2);border-radius:10px;background:var(--panel3);color:var(--text);cursor:pointer;overflow:hidden;font:inherit;font-size:12px;font-weight:700;text-align:left}
 .takepick img,.takepick .noimg{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}
@@ -452,40 +450,9 @@ html[data-look="neon"] .orow{color:color-mix(in srgb,var(--text) 80%,var(--muted
 html[data-look="neon"] .orow select,html[data-look="neon"] .orow input{background-color:var(--panel2)}
 html[data-look="neon"] .orow select,html[data-look="neon"] .orow input{text-transform:none;font-stretch:normal;font-variation-settings:normal}
 html{color-scheme:dark}
-/* palettes: each swaps the gradient and the surfaces that go with it (Neon is the default above) */
-html[data-look="neon"][data-pal="sunset"]{
-  --bg:#130e13;--chrome:#0e0a0e;--panel:#1a1319;--panel2:#221820;--panel3:#2c1f29;--line:#2d2029;--line2:#3d2c37;--line3:#4b3845;
-  --text:#f6eef2;--muted:#bba8b2;--dim:#8a7781;
-  --g1:#ffd166;--g2:#ff8a5b;--g3:#ff4f8b;--g4:#b14dff;--accent:#ffd166;--accent-bg:#221820;--accent-bg2:#221820;--accent-text:#f6eef2;--ink:#120b10}
-html[data-look="neon"][data-pal="aurora"]{
-  --bg:#0a1218;--chrome:#070d12;--panel:#0f1a22;--panel2:#14222c;--panel3:#1b2c38;--line:#1b2b36;--line2:#263946;--line3:#314757;
-  --text:#ecf6fa;--muted:#9fb6c2;--dim:#72899a;
-  --g1:#a8ffe0;--g2:#4fd8ff;--g3:#6a86ff;--g4:#c38bff;--accent:#a8ffe0;--accent-bg:#14222c;--accent-bg2:#14222c;--accent-text:#ecf6fa;--ink:#08121a}
-html[data-look="neon"][data-pal="ember"]{
-  --bg:#120f0c;--chrome:#0d0b09;--panel:#1a1511;--panel2:#221c16;--panel3:#2c241c;--line:#2d251d;--line2:#3d3228;--line3:#4b3f33;
-  --text:#f6f0e9;--muted:#b9ad9f;--dim:#8a7f72;
-  --g1:#ffe27a;--g2:#ffb347;--g3:#ff7a45;--g4:#ff4d6d;--accent:#ffe27a;--accent-bg:#221c16;--accent-bg2:#221c16;--accent-text:#f6f0e9;--ink:#140e09}
-/* the Look menu */
-.lookwrap{position:relative}
-.looksw{display:flex;align-items:center;gap:8px;cursor:pointer}
-.looksw .lsw{width:28px;height:10px;border-radius:3px;background:var(--grad)}
-.lookmenu{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;padding:4px;border-radius:12px;background:var(--panel);border:1px solid var(--line2);box-shadow:0 20px 50px rgba(0,0,0,.55)}
-.lookmenu.hide{display:none}
-.lookmenu button{display:flex;align-items:center;gap:8px;width:100%;padding:5px 7px;min-height:28px;border-radius:7px;background:none;border:0;color:var(--text);font:inherit;font-size:14px;font-weight:700;text-align:left;cursor:pointer}
-.lookmenu button:hover{background:var(--panel2)}
-.lookmenu button[aria-checked=true]{background:var(--panel2)}
-.lookmenu .pv{display:block;width:28px;height:10px;border-radius:3px;flex:none}
-.lookmenu .nm{flex:1}
-.lookmenu .ck{color:var(--muted);font-size:12px}
-html[data-look="neon"] .lookmenu button{font-size:13px}
-html[data-look="neon"] .lookmenu button{font-stretch:condensed;font-variation-settings:'wdth' 75;text-transform:uppercase;letter-spacing:.06em}
-/* the project name: its own card on the Brief, a title line on the other screens */
-.projcard .label{display:block;margin-bottom:12px}
-#pname{font-size:20px;font-weight:700;padding:12px 14px}
-#pname.bad,#nmi.bad{border-color:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 25%,transparent)}
+/* the project name: on the Brief's start card, a title line on the other screens */
+#pname{font-size:16px;font-weight:700;padding:10px 12px;margin-top:6px}
 .proj{margin:16px 0 0;font-size:28px;line-height:1.05;font-weight:700;color:var(--text)}
-.overlay .box.namebox{text-align:left;max-width:520px}
-.namebox #nmi{font-size:18px;font-weight:600}
 html[data-look="neon"] .proj{font-stretch:condensed;font-variation-settings:'wdth' 75;text-transform:uppercase;letter-spacing:.03em}
 html[data-look="neon"] .sub{margin-top:8px}
 html[data-look="neon"] h1 + .sub{margin-top:12px}
@@ -505,7 +472,6 @@ html[data-look="neon"] .eta-b{font-stretch:condensed;font-variation-settings:'wd
     <span class="chip" id="sys"><span class="led" aria-hidden="true"></span>ComfyUI</span>
     <a class="toplink" href="#/videos">Your videos</a>
     <a class="toplink" href="/" target="_blank" rel="noopener">Open ComfyUI</a>
-    <span class="lookwrap"><button type="button" class="chip looksw" id="look" aria-haspopup="true" aria-expanded="false" aria-controls="lookmenu" title="The Studio's colours"><span class="lsw" aria-hidden="true"></span><span id="lookname">Look: Neon</span></button><div class="lookmenu hide" id="lookmenu" role="menu" aria-label="Look"></div></span>
   </div>
 </header>
 <main id="app" aria-live="polite"></main>
@@ -527,10 +493,12 @@ const WORLDS = [
   {id:"y2k", img:true, title:"Y2K Pop Star", sub:"1999–2002, shot on a point-and-shoot", sw:["#F2A65A","#E86FA0","#3FA7C9","#C8B48A","#1E1A16"],
    text:"Pop stars of 1999 to 2002, the last years before smartphones and social media, all invented adults in their twenties, styled exactly the way pop artists dressed then: bubblegum-pop princesses, boy-band members, R&B divas, pop-punk singers and rappers; frosted tips, butterfly clips, crimped hair, tinted rimless shades and body glitter; low-rise flared jeans, baby tees, velour tracksuits, denim on denim and cargo pants; a bedroom with an inflatable chair and a lava lamp, an empty shopping-mall atrium with a fountain after closing time, a roller rink, a backyard pool with an inflatable raft, the back of a stretch limo; photographed with a 35mm point-and-shoot, direct flash, warm film colour and grain"},
 ];
-const CUTS = ["every 2 bars","every bar","to the music (subtle)","to the music (intense)"];
+// cut choices: the value the Director takes, and its plain-words label
+const CUTS = [["every 2 bars","Slow: every 2 bars"],["every bar","Steady: every bar"],["to the music (subtle)","On the beat"],["to the music (intense)","Fast, on the beat"]];
 const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const DEFAULT_BRIEF = {name:"", song:"", character:"", theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
-  cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto"};
+  cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
+  looks:"auto", framing:"mixed", broll_style:"mix"};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -695,23 +663,8 @@ function saveBrief(){ store.set("brief", S.brief); }
 // the project name: saved with the run (studio.json); in demo mode the brief's name stands in
 const projectOf = r => (r && r.project) || (DEMO && r ? ((store.get("briefs", {})[r.run] || {}).name || "") : "");
 const fileStem = r => (projectOf(r).replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80)) || r.run;
-// asks for the project name before the first step forward; resolves with the name, or null
-function askName(){
-  return new Promise(res => {
-    const d = document.createElement("div");
-    d.className = "overlay"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true"); d.setAttribute("aria-labelledby", "nmh");
-    d.innerHTML = `<form class="box namebox"><h2 class="label" id="nmh">Name your project</h2>
-      <p class="muted" style="margin:10px 0 16px">It goes on every screen and on the files you download.</p>
-      <input id="nmi" type="text" maxlength="80" autocomplete="off" placeholder="Like “Gladiator Games”" aria-labelledby="nmh">
-      <div class="row" style="justify-content:flex-end;gap:10px;margin-top:18px"><button type="button" class="btn" id="nmc">Cancel</button><button type="submit" class="btn primary" id="nmok">Continue</button></div></form>`;
-    document.body.appendChild(d);
-    const i = d.querySelector("#nmi"), done = v => { d.remove(); res(v); };
-    setTimeout(() => i.focus(), 0);
-    d.querySelector("form").onsubmit = e => { e.preventDefault(); const v = i.value.trim(); if (!v){ i.classList.add("bad"); i.focus(); return; } done(v); };
-    d.querySelector("#nmc").onclick = () => done(null);
-    d.addEventListener("keydown", e => { if (e.key === "Escape") done(null); });
-  });
-}
+// a song file's name as a title: no folder, extension or "(Official Music Video)"-style tags
+const songTitle = f => String(f || "").split("/").pop().replace(/\.[^.]+$/, "").replace(/\s*[(\[][^)\]]*[)\]]/g, "").replace(/[_]+/g, " ").trim().slice(0, 80) || "Untitled";
 function stopTimer(){ if (S.timer){ clearInterval(S.timer); S.timer = null; } }
 function setSteps(cur){
   const names = ["The Brief","The Plan","Rendering","Result"];
@@ -756,11 +709,6 @@ async function viewBrief(){
   <div class="head"><div><h1>The Brief</h1><p class="sub">One song and one line about the world it lives in. OneShot MV casts it, plans the cut and renders the video.</p></div></div>
   <div class="cols">
    <div class="colmain">
-    <section class="card projcard">
-      <label class="label" for="pname">Project name</label>
-      <input id="pname" type="text" maxlength="80" autocomplete="off" placeholder="Name this video, like “Gladiator Games”">
-      <p class="note" style="margin-top:10px">Shown on every screen and used for the files you download.</p>
-    </section>
     <section class="card" aria-labelledby="songh">
       <div class="row"><h2 class="label" id="songh">Song</h2><span id="songname" style="font-weight:700;font-size:16px"></span><span id="songmeta" class="mono muted" style="font-size:12px"></span>
         <span style="margin-left:auto" class="row"><button class="btn sm hide" id="playbtn" type="button">Play this part</button><button class="btn sm hide" id="replace" type="button">New song</button></span></div>
@@ -777,13 +725,6 @@ async function viewBrief(){
       <audio id="audio" preload="none"></audio>
     </section>
 
-    <section class="card" aria-labelledby="charh">
-      <div class="row"><h2 class="label" id="charh">Character</h2><span class="muted" style="font-size:13px">optional</span>
-        <span style="margin-left:auto" class="row"><button class="btn sm hide" id="charnew" type="button">New photo</button><button class="btn sm hide" id="charoff" type="button">Remove</button></span></div>
-      <div id="charpick" style="margin-top:14px"></div>
-      <p class="note" id="charnote"></p>
-    </section>
-
     <section class="card" aria-labelledby="worldh">
       <h2 class="label" id="worldh" style="margin-bottom:16px">World</h2>
       <div class="tiles" role="group" aria-label="World examples" id="tiles"></div>
@@ -791,36 +732,46 @@ async function viewBrief(){
       <textarea id="world" rows="6" placeholder="Like “the gladiator games in ancient Rome”. For more control: the people in the order you want them; the places; the light."></textarea>
       <p class="note">One line is enough. The characters you name are cast first, in the order you name them, and every shot is a different invented person.</p>
     </section>
+
+    <section class="card" aria-labelledby="charh">
+      <div class="row"><h2 class="label" id="charh">Character</h2><span class="muted" style="font-size:13px">optional</span>
+        <span style="margin-left:auto" class="row"><button class="btn sm hide" id="charnew" type="button">New photo</button><button class="btn sm hide" id="charoff" type="button">Remove</button></span></div>
+      <div id="charpick" style="margin-top:14px"></div>
+      <p class="note" id="charnote"></p>
+    </section>
    </div>
 
    <aside class="colside">
     <section class="card">
-      <h2 class="side-h">Format</h2>
+      <h2 class="side-h">Output</h2>
       <div class="grid3" role="group" aria-label="Format" id="fmts"></div>
-    </section>
-    <section class="card">
-      <h2 class="side-h">Quality</h2>
-      <div class="stack" role="group" aria-label="Quality" id="tiers"></div>
+      <div class="stack" role="group" aria-label="Quality" id="tiers" style="margin-top:14px"></div>
       <p class="tiny" style="margin:8px 0 0" id="etanote"></p>
-      <div class="modelrow"><div class="orow"><span class="mlabel">Model Versions</span><div class="seg mini" role="group" aria-label="Model set" id="mset"></div></div>
-        <p class="tiny" id="mnote" style="margin:4px 0 0"></p></div>
     </section>
     <section class="card">
       <details class="adv">
-        <summary><span class="side-h">Advanced: cuts, effects, cast</span><svg class="car" aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l4 4-4 4"/></svg></summary>
+        <summary><span class="side-h">Advanced</span><span class="tiny" style="margin-left:8px">editing, cast, checks</span><svg class="car" aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l4 4-4 4"/></svg></summary>
         <div class="opts">
-          <div class="ogroup">Cuts by energy</div>
-          ${[["low","Low"],["medium","Medium"],["high","High"]].map(([k, n]) => `<label class="orow sub"><span><i style="background:${LEVEL_COL[k]}"></i>${n}</span><select id="cuts_${k}">${CUTS.map(c=>`<option>${c}</option>`).join("")}</select></label>`).join("")}
-          <div class="ogroup">Effects and cast</div>
-          <div class="orow"><span>Audio FX</span><div class="seg mini" role="group" aria-label="Audio FX on the drums" id="fxs"></div></div>
+          <div class="ogroup">Editing: how often it cuts</div>
+          ${[["low","Quiet parts"],["medium","Verses"],["high","Choruses and drops"]].map(([k, n]) => `<label class="orow sub"><span><i style="background:${LEVEL_COL[k]}"></i>${n}</span><select id="cuts_${k}">${CUTS.map(([v, t])=>`<option value="${v}">${t}</option>`).join("")}</select></label>`).join("")}
+          <label class="orow"><span>Cutaways</span><select id="broll"><option value="0">none</option><option value="0.125">about 1 in 8 shots</option><option value="0.25">about 1 in 4 shots</option></select></label>
+          <label class="orow"><span>Cutaway style</span><select id="broll_style"><option value="mix">mix</option><option value="world">the World</option><option value="dance">dancing</option></select></label>
+          <div class="ogroup">Cast</div>
+          <label class="orow"><span>Looks in a shot</span><select id="looks"><option value="auto">auto</option><option value="loud">loud parts only</option><option value="all">every shot</option><option value="off">off</option></select></label>
+          <label class="orow"><span>Framing</span><select id="framing"><option value="mixed">mixed</option><option value="close">close-ups only</option></select></label>
           <label class="orow"><span>Crowd behind singers</span><select id="crowd"><option value="auto">auto</option><option value="on">on</option><option value="off">off</option></select></label>
-          <label class="orow"><span>Cast order</span><select id="cast_order"><option>as written</option><option>mixed</option></select></label>
-          <label class="orow"><span>Cutaways</span><select id="broll"><option value="0">none</option><option value="0.125">about 1 in 8</option><option value="0.25">about 1 in 4</option></select></label>
+          <label class="orow"><span>Cast order</span><select id="cast_order"><option value="as written">as written</option><option value="mixed">mixed</option></select></label>
           <label class="orow"><span>Seed (new number, new cast)</span><input id="seed" type="number" min="0" step="1"></label>
+          <div class="ogroup">Checks and models</div>
+          <label class="orow"><span>Take check retries</span><select id="qc"><option value="0">0, fastest</option><option value="1">1</option><option value="2">2</option><option value="3">3, cleanest</option></select></label>
+          <div class="orow"><span>Model versions</span><div class="seg mini" role="group" aria-label="Model set" id="mset"></div></div>
+          <p class="tiny" id="mnote" style="margin:0"></p>
         </div>
       </details>
+      <p class="tiny" id="advnote" style="margin:8px 0 0"></p>
     </section>
     <section class="card stack cta">
+      <label class="field" for="pname" style="margin:4px 0 2px">Project name<input id="pname" type="text" maxlength="80" autocomplete="off"></label>
       <button class="btn primary big two" id="go-preview" type="button"><span class="lbl">Preview the plan <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 9h10M10 5l4 4-4 4"/></svg></span><span class="eta-b" id="eta-prev"></span></button>
       <p class="center muted" style="margin:0;font-size:13px" id="eta-why">See the World the tool writes and every shot before the long render.</p>
       <button class="btn two" id="go-render" type="button"><span class="lbl">Skip the preview, make the video</span><span class="eta-b" id="eta-all"></span></button>
@@ -829,9 +780,9 @@ async function viewBrief(){
    </aside>
   </div>`;
 
-  // project name
+  // project name: optional, the song's title when left empty
   const pn = $("#pname"); pn.value = b.name || "";
-  pn.oninput = () => { b.name = pn.value; pn.classList.remove("bad"); saveBrief(); };
+  pn.oninput = () => { b.name = pn.value; saveBrief(); };
   // world tiles + text
   const ta = $("#world");
   ta.value = b.theme;
@@ -884,24 +835,31 @@ async function viewBrief(){
     const packs = r.missing_packs || [];
     if (packs.length) t += ` ${packs.join(", ")} didn't load in ComfyUI (look for IMPORT FAILED in its console), so nothing can render.`;
     $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!(miss.length || packs.length));
+    if (miss.length || packs.length) $("details.adv").open = true;  // a warning never hides in the folded card
   };
   drawModels();
   if (S.models) drawModels();  // then fresh: files may have landed since the page opened
   api("models").then(r => { S.models = r; if ($("#mset")){ drawModels(); drawChar(); } }).catch(() => { S.models = S.models || null; });
 
-  // advanced
-  for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","cast_order"]) { const el = $("#"+k); el.value = b[k]; el.onchange = () => { b[k] = el.value; saveBrief(); }; }
-  const seed = $("#seed"); seed.value = b.seed; seed.onchange = () => { b.seed = Math.max(0, parseInt(seed.value || "1", 10)); saveBrief(); };
-  const br = $("#broll"); br.value = String(b.broll); br.onchange = () => { b.broll = parseFloat(br.value); saveBrief(); };
-  const drawFx = () => {
-    $("#fxs").innerHTML = ["none","subtle","intense"].map(f => `<button type="button" class="opt" data-x="${f}" aria-pressed="${b.fx===f}">${f}</button>`).join("");
-    $("#fxs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.fx = el.dataset.x; saveBrief(); drawFx(); });
+  // advanced: a line under the card names whatever differs from the defaults
+  const advNote = () => {
+    const lab = id => { const el = $("#" + id); return el.options[el.selectedIndex].text; };
+    const ch = [["cuts_low","Quiet parts"],["cuts_medium","Verses"],["cuts_high","Choruses"],["broll","Cutaways"],["broll_style","Cutaway style"],["looks","Looks"],
+                ["framing","Framing"],["crowd","Crowd"],["cast_order","Cast order"],["qc","Retries"]]
+      .filter(([k]) => String(b[k]) !== String(DEFAULT_BRIEF[k])).map(([k, n]) => `${n}: ${lab(k)}`);
+    if (+b.seed !== DEFAULT_BRIEF.seed) ch.push(`Seed ${b.seed}`);
+    if ((b.models || "auto") !== "auto") ch.push(`Models: ${b.models === "full" ? "Full" : "24 GB"}`);
+    $("#advnote").textContent = ch.length ? "Changed: " + ch.join(" · ") : "";
   };
-  drawFx();
+  for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","cast_order","looks","framing","broll_style","qc"]) { const el = $("#"+k); el.value = String(b[k]); el.onchange = () => { b[k] = k === "qc" ? +el.value : el.value; saveBrief(); advNote(); }; }
+  const seed = $("#seed"); seed.value = b.seed; seed.onchange = () => { b.seed = Math.max(0, parseInt(seed.value || "1", 10)); saveBrief(); advNote(); };
+  const br = $("#broll"); br.value = String(b.broll); br.onchange = () => { b.broll = parseFloat(br.value); saveBrief(); advNote(); };
+  $("#mset").addEventListener("click", advNote);
+  advNote();
 
   // how long the preview takes (on the buttons), refreshed when the brief changes
   ta.addEventListener("input", refreshEstimate);
-  for (const k of ["cuts_low","cuts_medium","cuts_high","crowd"]) $("#"+k).addEventListener("change", refreshEstimate);
+  for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","looks","framing","qc"]) $("#"+k).addEventListener("change", refreshEstimate);
   seed.addEventListener("change", refreshEstimate); br.addEventListener("change", refreshEstimate);
   $("#tiles").addEventListener("click", refreshEstimate);
   $("#tiers").addEventListener("click", refreshEstimate);
@@ -915,6 +873,7 @@ async function viewBrief(){
 
 async function drawSong(){
   const b = S.brief;
+  $("#pname").placeholder = b.song ? songTitle(b.song) : "Named after the song";
   const pick = $("#songpick"), wave = $("#songwave");
   if (!b.song){
     wave.classList.add("hide"); $("#replace").classList.add("hide"); $("#playbtn").classList.add("hide");
@@ -1125,13 +1084,7 @@ function drawChar(){
 async function start(render, briefOverride){
   const b = Object.assign({}, briefOverride || S.brief);
   if (!b.song){ toast("Pick a song first."); return; }
-  if (!String(b.name || "").trim()){
-    const pn = $("#pname"); if (pn) pn.classList.add("bad");
-    const n = await askName(); if (!n) return;
-    b.name = n; if (!String(S.brief.name || "").trim()){ S.brief.name = n; saveBrief(); }
-    if (pn){ pn.value = S.brief.name; pn.classList.remove("bad"); }
-  }
-  b.name = String(b.name).trim();
+  b.name = String(b.name || "").trim() || songTitle(b.song);
   b.render = !!render;
   try{
     overlay(render ? "Starting the video" : "Writing the plan", render ? "Analysing the song, writing the World and queueing every shot. This takes a minute or two." : "Analysing the song, writing the World and planning every shot. Nothing renders yet.");
@@ -1301,7 +1254,7 @@ async function viewResult(run){
         <div class="row" style="justify-content:space-between;margin-bottom:12px;gap:10px">
           <div><h2 class="label" id="tlh">Shots</h2><p class="muted" style="margin:6px 0 0;font-size:14px">Something off in a shot? <b style="color:var(--text)">Click it to re-shoot it</b>, with a note on what to change.</p></div>
           <button class="btn sm" id="fixnow" type="button"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.5 2.5a3 3 0 0 0-3.8 3.8L2.5 10.5a1.4 1.4 0 0 0 2 2l4.2-4.2a3 3 0 0 0 3.8-3.8l-1.8 1.8-1.6-.4-.4-1.6z"/></svg>Fix the shot at <span id="nowt">0:00</span></button></div>
-        <div class="strip big" id="strip">${r.shots.map(s => `<button type="button" data-n="${s.n}" data-t="${s.t0}" aria-label="Shot ${s.n} at ${esc(clock(s.t0))}, ${esc(s.role)}: re-shoot" style="border-top:3px solid ${LEVEL_COL[s.energy]||'var(--mid)'}">${s.still ? `<img src="${esc(s.still)}" alt="" loading="lazy">` : `<span class="noimg"></span>`}<span class="sn" aria-hidden="true">${s.n}</span>${s.pickup ? `<span class="pk" aria-hidden="true">new</span>` : ""}<span class="fixhint" aria-hidden="true">Re-shoot</span></button>`).join("")}</div>
+        <div class="strip big" id="strip">${r.shots.map(s => `<button type="button" data-n="${s.n}" data-t="${s.t0}" aria-label="Shot ${s.n} at ${esc(clock(s.t0))}, ${esc(s.role)}${(s.looks || []).length ? `, ${s.looks.length} looks` : ""}: re-shoot" style="border-top:3px solid ${LEVEL_COL[s.energy]||'var(--mid)'}">${s.still ? `<img src="${esc(s.still)}" alt="" loading="lazy">` : `<span class="noimg"></span>`}<span class="sn" aria-hidden="true">${s.n}</span>${s.pickup ? `<span class="pk" aria-hidden="true">new</span>` : ""}${(s.looks || []).length ? `<span class="lk" aria-hidden="true">+${s.looks.length} looks</span>` : ""}<span class="fixhint" aria-hidden="true">Re-shoot</span></button>`).join("")}</div>
         <div id="fixbody"></div>
         <div id="pkbox" class="hide">
           <div class="row" style="justify-content:space-between;margin-top:18px"><h3 class="label">Pickups</h3><span class="tiny" id="pkcount"></span></div>
@@ -1310,9 +1263,9 @@ async function viewResult(run){
           <p class="tiny" style="margin:8px 0 0">They shoot together, so each model loads once; then the video is cut again. This cut is kept as a version.</p>
         </div>
       </section>
-      <section class="card" aria-labelledby="wh2"><h2 class="label" id="wh2" style="margin-bottom:10px">The World</h2>
-        <p style="margin:0;font-size:14px;color:var(--muted);line-height:1.55">${esc(r.world.line || "The house look.")}</p>
-        ${r.world.camera ? `<p class="tiny" style="margin:10px 0 0">Camera: ${esc(r.world.camera)}</p>` : ""}
+      <section class="card" aria-labelledby="wh2"><details class="worldmore"><summary><h2 class="label" id="wh2">The World</h2><span class="wl1">${esc(r.world.headline || r.world.line || "The house look.")}</span></summary>
+        <p style="margin:12px 0 0;font-size:14px;color:var(--muted);line-height:1.55">${esc(r.world.line || "The house look.")}</p>
+        ${r.world.camera ? `<p class="tiny" style="margin:10px 0 0">Camera: ${esc(r.world.camera)}</p>` : ""}</details>
         <p style="margin:12px 0 0"><a href="#" id="showplan" style="font-size:13px;font-weight:600">The plan, shot by shot</a></p></section>
     </div>
     <aside class="colside refine" aria-label="Post processing">
@@ -1333,14 +1286,14 @@ async function viewResult(run){
         <div class="acc-b" id="acc-vig" hidden>
           <label class="slider"><span>Intensity</span><input type="range" id="vg" min="0" max="95" step="1"><b class="mono" id="vgv"></b></label></div></section>
       <div class="applybar"><button class="btn" id="apply" type="button" disabled style="width:100%">No changes yet</button>
-        <p class="tiny center" style="margin:8px 0 0">A new cut with these settings; nothing re-renders. The cut before is replaced.</p></div>
+        <p class="tiny center" style="margin:8px 0 0">A new cut with these settings; nothing re-renders. The cut before is kept as a version.</p></div>
     </aside>
   </div>`;
   const vid = $("#vid");
   // versions
-  const vers = [{url: r.video, label: "Current cut"}].concat((r.versions || []).slice().reverse().map(v => ({url: v.url, label: `${v.name} · before pickups`})));
+  const vers = [{url: r.video, label: "Current cut"}].concat((r.versions || []).slice().reverse().map(v => ({url: v.url, label: `${v.name} · earlier cut`})));
   let curV = 0;
-  const drawVers = () => { $("#vers").innerHTML = vers.map((v,i) => `<button type="button" class="opt" data-i="${i}" aria-pressed="${i===curV}">${esc(v.label)}</button>`).join("");
+  const drawVers = () => { $("#vers").classList.toggle("hide", vers.length < 2); $("#vers").innerHTML = vers.map((v,i) => `<button type="button" class="opt" data-i="${i}" aria-pressed="${i===curV}">${esc(v.label)}</button>`).join("");
     $("#vers").querySelectorAll(".opt").forEach(el => el.onclick = () => { curV = +el.dataset.i; const t = vid.currentTime; vid.src = vers[curV].url; vid.currentTime = t; $("#dl").href = vers[curV].url; drawVers(); }); };
   drawVers();
   // shots: the one under the playhead, picking one to fix
@@ -1528,29 +1481,11 @@ const LOGO = id => `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
   [[11.6, 4.5], [14.2, 9], [16.8, 12], [19.4, 6.5]].map(([x, h]) => `<rect x="${x - 1}" y="${16 - h / 2}" width="2" height="${h}" rx="1" fill="#0b0d10"/>`).join("") + `</svg>`;
 function drawIcon(){
   $("#mark").innerHTML = LOGO("lg");
-  // a favicon can't read the page's CSS variables, so it gets the palette's colours written in
+  // a favicon can't read the page's CSS variables, so it gets the colours written in
   const cs = getComputedStyle(document.documentElement);
   $("#fav").href = "data:image/svg+xml," + encodeURIComponent(LOGO("fg").replace(/var\((--[a-z0-9]+)\)/g, (m, v) => cs.getPropertyValue(v).trim() || "#000"));
 }
 
-// the palettes, with the surface and gradient colours the menu previews
-const PALS = [["neon","Neon","#0d1015",["#2dd4bf","#2dd4bf"]],["sunset","Sunset","#130e13",["#ffd166","#ff8a5b","#ff4f8b","#b14dff"]],
-              ["aurora","Aurora","#0a1218",["#a8ffe0","#4fd8ff","#6a86ff","#c38bff"]],["ember","Ember","#120f0c",["#ffe27a","#ffb347","#ff7a45","#ff4d6d"]]];
-function drawLook(){
-  const cur = document.documentElement.getAttribute("data-pal") || "neon", p = PALS.find(x => x[0] === cur) || PALS[0];
-  $("#lookname").textContent = "Look: " + p[1];
-  $("#lookmenu").innerHTML = PALS.map(([id, name, bg, g]) => `<button type="button" role="menuitemradio" aria-checked="${id === cur}" data-pal="${id}">
-    <span class="pv" aria-hidden="true" style="background:linear-gradient(90deg,${g.join(",")})"></span><span class="nm">${name}</span><span class="ck" aria-hidden="true">${id === cur ? "✓" : ""}</span></button>`).join("");
-  $("#lookmenu").querySelectorAll("[data-pal]").forEach(el => el.onclick = () => {
-    document.documentElement.setAttribute("data-pal", el.dataset.pal); try{ localStorage.setItem("osmv.pal", el.dataset.pal); }catch(e){}
-    drawLook(); drawIcon(); closeLook(); });
-}
-const closeLook = () => { $("#lookmenu").classList.add("hide"); $("#look").setAttribute("aria-expanded", "false"); };
-$("#look").onclick = e => { e.stopPropagation(); const m = $("#lookmenu"), open = m.classList.contains("hide"); m.classList.toggle("hide", !open); $("#look").setAttribute("aria-expanded", String(open));
-  if (open){ const b = m.querySelector('[aria-checked="true"]'); if (b) b.focus(); } };
-document.addEventListener("click", e => { if (!e.target.closest(".lookwrap")) closeLook(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#lookmenu").classList.contains("hide")){ closeLook(); $("#look").focus(); } });
-drawLook();
 drawIcon();
 demoBar();
 loadSystem();

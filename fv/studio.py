@@ -371,14 +371,21 @@ def _director_has(name: str) -> bool:
         return False
 
 
+def _pick(v, ok: tuple):
+    return v if v in ok else ok[0]
+
+
 def _director_graph(b: dict) -> dict:
     cuts = {k: b.get(k) for k in ("cuts_low", "cuts_medium", "cuts_high") if b.get(k)}
     d = {"audio": ["1", 0], "mode": "voice", "pack": "crowd", "format": b.get("format", "16:9"),
          "preset": b.get("preset", "quality"), "seconds": float(b.get("seconds", 30)),
-         "start": float(b.get("start", -1)), "seed": int(b.get("seed", 1)), "twins": "auto",
+         "start": float(b.get("start", -1)), "seed": int(b.get("seed", 1)),
+         "twins": _pick(b.get("looks"), ("auto", "loud", "all", "off")),
          "queue_renders": bool(b.get("render", False)), "theme": (b.get("theme") or "").strip(),
-         "run_name": b.get("run_name", ""), "queue_assemble": True, "framing": "mixed",
-         "broll_share": float(b.get("broll", 0.125)), "broll_style": "mix", "qc_retries": int(b.get("qc", 2)),
+         "run_name": b.get("run_name", ""), "queue_assemble": True,
+         "framing": _pick(b.get("framing"), ("mixed", "close")),
+         "broll_share": float(b.get("broll", 0.125)), "broll_style": _pick(b.get("broll_style"), ("mix", "world", "dance")),
+         "qc_retries": min(3, max(0, int(b.get("qc", 2)))),
          "staged": True, "audio_fx": b.get("fx", "subtle"), "cast_order": b.get("cast_order", "as written"),
          "crowd": b.get("crowd", "auto"), **cuts}
     if b.get("models") in ("auto", "24gb", "full") and _director_has("models"):
@@ -758,6 +765,16 @@ def _versions(d: str, p: dict) -> list[dict]:
     return out
 
 
+def _keep_version(d: str) -> None:
+    """A copy of the run's current cut in versions/, before a pickup or an Apply replaces it."""
+    import shutil
+    done = _load(os.path.join(d, "done.json")) or {}
+    if done.get("video") and os.path.isfile(done["video"]):
+        os.makedirs(os.path.join(d, "versions"), exist_ok=True)
+        nv = len(glob.glob(os.path.join(d, "versions", "v*_*.mp4"))) + 1
+        shutil.copy2(done["video"], os.path.join(d, "versions", f"v{nv}_{os.path.basename(done['video'])}"))
+
+
 def _pickup_state(d: str, p: dict, done: dict | None) -> dict:
     pk = (p.get("pickups") or [])
     if not pk:
@@ -780,7 +797,6 @@ def _pickup_state(d: str, p: dict, done: dict | None) -> dict:
 
 
 def _pickups(name: str, items: list, dry: bool = False) -> dict:
-    import shutil
     import time
     from . import director, formats, graphs
     d = _run_dir(name)
@@ -873,12 +889,7 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
             return out
         return {"dry": True, "pickup": k, "stills": [show(g) for g in stills], "clips": [show(g) for g in clips],
                 "changes": changes}
-    # keep the cut as it is now
-    done = _load(os.path.join(d, "done.json")) or {}
-    if done.get("video") and os.path.isfile(done["video"]):
-        os.makedirs(os.path.join(d, "versions"), exist_ok=True)
-        nv = len(glob.glob(os.path.join(d, "versions", "v*_*.mp4"))) + 1
-        shutil.copy2(done["video"], os.path.join(d, "versions", f"v{nv}_{os.path.basename(done['video'])}"))
+    _keep_version(d)
     chain = []
     if stills:
         chain += [graphs.free_memory("before pickup stills").nodes] + stills
@@ -935,7 +946,6 @@ def _soft_clips(d: str, p: dict) -> list:
 def _sharpen(name: str, dry: bool = False) -> dict:
     """Re-run each soft clip's own job (same seed, so the same take) with the clip decoded in one
     temporal tile, then cut again. Nothing else in the plan changes."""
-    import shutil
     import time
     from . import director, graphs
     d = _run_dir(name)
@@ -975,11 +985,7 @@ def _sharpen(name: str, dry: bool = False) -> dict:
     if dry:
         return {"dry": True, "clips": len(clips), "estimate_min": round(est, 1),
                 "prefixes": [c["clip"] for c in changes][:5]}
-    done = _load(os.path.join(d, "done.json")) or {}
-    if done.get("video") and os.path.isfile(done["video"]):
-        os.makedirs(os.path.join(d, "versions"), exist_ok=True)
-        nv = len(glob.glob(os.path.join(d, "versions", "v*_*.mp4"))) + 1
-        shutil.copy2(done["video"], os.path.join(d, "versions", f"v{nv}_{os.path.basename(done['video'])}"))
+    _keep_version(d)
     chain = [graphs.free_memory("before re-decoding").nodes] + clips + \
         [graphs.free_memory("before assembly").nodes, graphs.assemble(run_dir=d, prefix=rel).nodes]
     director.check_graphs(chain)  # before the plan records the pass
@@ -1290,6 +1296,7 @@ async def _api(request: web.Request, route: str) -> web.Response:
                         fu[k] = round(min(hi, max(lo, float(body[k]))), 3)
                 plan_["finish_user"] = fu
                 json.dump(plan_, open(pj, "w", encoding="utf-8"), indent=1)
+            _keep_version(d)
             rel = os.path.relpath(d, _out()).replace(os.sep, "/")
             g = {"1": {"class_type": "FVAssemble", "inputs": {"run_dir": d, "filename_prefix": rel,
                                                             "fx_intensity": 1.0, "finish": True, "audio_fx": "from the run"}}}
