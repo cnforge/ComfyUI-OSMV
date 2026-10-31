@@ -572,7 +572,12 @@ def _run(name: str) -> dict:
                       "energy": s.get("energy", ""), "size": s.get("size", ""), "kind": info["kind"],
                       "role": info["role"], "gender": info["gender"], "age": info["age"], "wear": info["wear"],
                       "place": info["place"], "still": _view(still) if still else "", "clip": _view(clip) if clip else "",
-                      "takes": takes, "state": state, "render": r.get("id"), "pickup": int(r.get("pickup") or 0)})
+                      "takes": takes, "state": state, "render": r.get("id"), "pickup": int(r.get("pickup") or 0),
+                      "looks": [{"render": x["id"], "still": _view(x["key"]) if x.get("key") else "",
+                                 "clip": _view(x["path"]) if os.path.isfile(x.get("path") or "") else "",
+                                 "pickup": int(x.get("pickup") or 0)}
+                                for x in p.get("renders", []) if x.get("shot") == s["index"] and x.get("role") == "B"
+                                and not x.get("unused") and x is not r]})
     # where the run is
     queued_jobs = 0
     try:
@@ -800,7 +805,10 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
         if idx not in shots:
             raise ValueError(f"no shot {idx + 1}")
         rs = [r for r in p["renders"] if r.get("shot") == idx and not r.get("unused")]
-        r = next((x for x in rs if x.get("role") == "R"), None) or next((x for x in rs if x.get("role") == "A"), None)
+        if it.get("render") is not None:  # one of the shot's look clips
+            r = next((x for x in rs if x["id"] == int(it["render"])), None)
+        else:
+            r = next((x for x in rs if x.get("role") == "R"), None) or next((x for x in rs if x.get("role") == "A"), None)
         if r is None:
             raise ValueError(f"shot {idx + 1} has no clip to re-shoot")
         tagbase = f"r{r['id']:03d}{r['role']}"
@@ -813,7 +821,7 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
         change = {"shot": idx + 1, "render": r["id"], "mode": mode, "note": note,
                   "before": {"path": r.get("path"), "portrait": r.get("portrait"), "key": r.get("key")}}
         if mode == "recast":
-            cur = r.get("key") if r["role"] == "R" else r.get("portrait")
+            cur = r.get("key") if r["role"] in ("R", "B") else r.get("portrait")
             if not cur:  # the still the clip job reads
                 cur = next((n["inputs"].get("path") for n in g.values() if n.get("class_type") == "FVLoadImagePath"), "")
             sj = _find_job(d, _stem(cur)) if cur else None
@@ -831,7 +839,7 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
             stills.append(gs)
             if not dry:
                 json.dump(gs, open(os.path.join(d, "jobs", f"pickup{k}_{stag}.json"), "w", encoding="utf-8"), indent=1)
-            if r["role"] == "R":
+            if r["role"] in ("R", "B"):
                 r["key"] = new_still
             else:
                 r["portrait"] = new_still
@@ -846,7 +854,8 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
             if "sync_delay" in r:
                 r["sync_delay_before"] = r["sync_delay"]
         r["path"] = new_clip
-        r["sync_delay"] = r.get("sync_delay_before", delay0) if mode == "take" else delay0
+        if r["role"] != "B":  # a look follows its lead's mouth, so it keeps the lead's offset
+            r["sync_delay"] = r.get("sync_delay_before", delay0) if mode == "take" else delay0
         r["pickup"] = k
         change["clip"] = new_clip
         changes.append(change)

@@ -60,9 +60,10 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
 4. **Result.** The video, Download MP4, and Export XML for Premiere Pro or DaVinci Resolve (every
    clip with its in and out points). From here you can:
    - Re-shoot any shot. Click it and choose a new take of the same person or a new person, with
-     a note on what to change ("a woman in her seventies, in bright sun"). Pick several and they
-     shoot together; the video is then cut again, and the cut before stays as a version you can
-     switch back to.
+     a note on what to change ("a woman in her seventies, in bright sun"). In a shot with looks
+     (the quick cut-ins of other looks), you can pick just one of them. Pick several takes and
+     only those shoot again, together; everything else stays as it is, the video is cut again,
+     and the cut before stays as a version you can switch back to.
    - Change the post processing without re-rendering anything: audio-reactive FX for low, medium
      and high energy sections (None, Subtle or Intense), a color grade (None, Neon Saturated,
      Technicolor, Teal & Orange, Golden Hour, Warm Romantic, Soft Eterna, Low Key, Industrial
