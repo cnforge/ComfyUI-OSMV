@@ -880,7 +880,8 @@ async function viewBrief(){
     $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!(miss.length || packs.length));
   };
   drawModels();
-  if (S.models) drawModels(); else api("models").then(r => { S.models = r; if ($("#mset")){ drawModels(); drawChar(); } }).catch(() => { S.models = null; });
+  if (S.models) drawModels();  // then fresh: files may have landed since the page opened
+  api("models").then(r => { S.models = r; if ($("#mset")){ drawModels(); drawChar(); } }).catch(() => { S.models = S.models || null; });
 
   // advanced
   for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","cast_order"]) { const el = $("#"+k); el.value = b[k]; el.onchange = () => { b[k] = el.value; saveBrief(); }; }
@@ -1094,7 +1095,7 @@ function drawChar(){
   const choose = async f => { if (!f) return; const name = await toInput(f, "photo"); if (name){ b.character = name; saveBrief(); drawChar(); } };
   if (b.character){
     const parts = b.character.split("/"), q = new URLSearchParams({filename: parts.pop(), subfolder: parts.join("/"), type: "input"});
-    pick.innerHTML = `<div class="row" style="gap:14px"><img src="/api/view?${q}" alt="The character photo" style="width:96px;height:96px;object-fit:cover;border-radius:12px"><span style="font-weight:700;word-break:break-all">${esc(b.character.split("/").pop())}</span></div>`;
+    pick.innerHTML = `<div class="row" style="gap:14px"><img src="/api/view?${q}" alt="The character photo" style="height:140px;width:auto;max-width:240px;object-fit:contain;border-radius:12px;background:var(--panel3)"><span style="font-weight:700;word-break:break-all">${esc(b.character.split("/").pop())}</span></div>`;
   } else {
     pick.innerHTML = `<div class="drop" id="chardrop" tabindex="0" role="button" aria-label="Upload a character photo">
         <div style="font-weight:700;font-size:16px">Drop a photo of the person here, or click to upload</div>

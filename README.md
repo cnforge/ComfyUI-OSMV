@@ -215,6 +215,10 @@ about every beat on intense.
      non-commercial research use only) in `ComfyUI/models/insightface/models/buffalo_l/`. They run
      with onnxruntime (`pip install onnxruntime-gpu` with ComfyUI's Python). Without them the
      framing checks are skipped.
+   - Faces on OpenCV 5 (which dropped the Haar face finder): put
+     [`face_detection_yunet_2023mar.onnx`](https://huggingface.co/opencv/face_detection_yunet) in
+     `ComfyUI/models/facedetection/`. It finds the face for match cuts, the mouth check and the
+     Character photo's crop. Without it, the photo is cut from the top.
    - Speed: [SageAttention](https://github.com/thu-ml/SageAttention) makes the LTX clips faster.
      If it isn't installed, the jobs run without it. The default kernel in `fv/models.json`
      (`ltx23_sage`) needs an RTX 40 or 50 series card; set it to `auto` on older cards.
@@ -338,6 +342,7 @@ The optional checks (Install, step 4):
 |---|---|---|---|
 | SyncNet v2 and the S3FD face detector | Lip-sync scores and each take's sync offset | Research use under CC-BY (Oxford VGG); no licence stated for S3FD | [VGG SyncNet page](https://www.robots.ox.ac.uk/~vgg/software/lipsync/) |
 | insightface buffalo_l (`det_10g`, `w600k_r50`) | Framing and identity checks | Non-commercial research use only | [insightface model zoo](https://github.com/deepinsight/insightface/tree/master/model_zoo) |
+| OpenCV YuNet face detector | Face finding on OpenCV 5 | MIT | [opencv/face_detection_yunet](https://huggingface.co/opencv/face_detection_yunet) |
 
 Models that only other packs and modes use (a default run never loads them):
 

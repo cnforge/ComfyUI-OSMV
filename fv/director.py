@@ -210,6 +210,11 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     if mode == "voice":
         if pk["casting"].get("artist") and not (artist_path and os.path.exists(artist_path)):
             raise ValueError("the artist pack needs artist_image_path (one photo of the artist)")
+        if artist_path:  # cut to the frame's shape around the face (Qwen keeps the photo's shape)
+            from . import faces
+            os.makedirs(run_dir, exist_ok=True)
+            artist_path = faces.frame_photo(artist_path, os.path.join(run_dir, "character.png"),
+                                            formats.portrait_size(fmt)[1])
         p = planner.plan_voice(tl, pk, fmt=fmt, preset=preset, seconds=seconds, start=start, seed=seed,
                                twins=None if twins == "auto" else twins, framing=framing)
         p["artist_path"] = artist_path

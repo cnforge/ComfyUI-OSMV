@@ -55,6 +55,8 @@ import os
 
 import numpy as np
 
+from .faces import _cascade
+
 THRESH = {"min_frames_frac": 0.85, "frozen": 0.006, "exposure_frac": 0.25, "mouth_ratio": 0.5,
           "mouth_dark_std": 0.01, "cut_abs": 0.18, "cut_rel": 5.0, "drift": 0.55,
           "sync_conf": 4.5, "sync_offset": 9, "sync_singing": 0.55,
@@ -120,21 +122,12 @@ def _read(path: str, size: int = 256, max_frames: int = 400):
     return out, fps
 
 
-_CASCADE = None
-
-
 def _faces(gray):
-    import cv2
-    global _CASCADE
-    if _CASCADE is None:
-        try:
-            _CASCADE = cv2.CascadeClassifier(os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml"))
-        except Exception:  # OpenCV builds without the cascade module: skip the mouth check
-            _CASCADE = False
-    if _CASCADE is False:
+    casc = _cascade()
+    if not casc:  # no face detector installed: skip the mouth check
         return []
     h, w = gray.shape
-    return _CASCADE.detectMultiScale(gray, 1.1, 4, minSize=(int(0.12 * min(h, w)),) * 2)
+    return casc.detectMultiScale(gray, 1.1, 4, minSize=(int(0.12 * min(h, w)),) * 2)
 
 
 def face_widths(frames, n: int = 16) -> list:
@@ -391,7 +384,7 @@ def check_clip(path: str, *, expected_frames: int = 0, voice: bool = False, voca
     if voice:
         box = face_box(frames)
         r["face"] = box is not None
-        dr = drift(face_widths(frames)) if _CASCADE is not False else None
+        dr = drift(face_widths(frames)) if _cascade() else None
         if dr is not None:
             r["drift"] = round(dr, 3)
             if dr < THRESH["drift"]:

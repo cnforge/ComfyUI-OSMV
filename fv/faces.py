@@ -16,6 +16,34 @@ import numpy as np
 _CASCADE = None
 
 
+YUNET = "face_detection_yunet_2023mar.onnx"
+
+
+class _YuNet:
+    """OpenCV's YuNet behind the cascade's detectMultiScale (OpenCV 5 dropped the cascades).
+    Takes gray or BGR; minSize is the smallest face kept."""
+    def __init__(self, path):
+        import cv2
+        self.det = cv2.FaceDetectorYN.create(path, "", (320, 320), 0.6)
+
+    def detectMultiScale(self, img, *_, minSize=(0, 0)):
+        import cv2
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        self.det.setInputSize((img.shape[1], img.shape[0]))
+        fs = self.det.detect(img)[1]
+        return [tuple(int(v) for v in f[:4]) for f in (fs if fs is not None else []) if f[2] >= minSize[0]]
+
+
+def _yunet_path() -> str | None:
+    try:
+        import folder_paths  # type: ignore
+        p = os.path.join(folder_paths.models_dir, "facedetection", YUNET)
+    except Exception:
+        return None
+    return p if os.path.exists(p) else None
+
+
 def _cascade():
     global _CASCADE
     if _CASCADE is None:
@@ -24,7 +52,7 @@ def _cascade():
             _CASCADE = cv2.CascadeClassifier(os.path.join(cv2.data.haarcascades,
                                                           "haarcascade_frontalface_default.xml"))
         except Exception:
-            _CASCADE = False
+            _CASCADE = _YuNet(_yunet_path()) if hasattr(cv2, "FaceDetectorYN") and _yunet_path() else False
     return _CASCADE
 
 
@@ -35,7 +63,8 @@ def method() -> str:
             return "s3fd"
     except Exception:
         pass
-    return "haar" if _cascade() else ""
+    c = _cascade()
+    return "" if not c else "yunet" if isinstance(c, _YuNet) else "haar"
 
 
 def _s3fd_detector():
@@ -92,7 +121,7 @@ def track(path: str, every: int = 3, size: int = 320) -> dict | None:
     how = method()
     if not how or not path or not os.path.exists(path):
         return None
-    casc = _cascade() if how == "haar" else None
+    casc = _cascade() if how != "s3fd" else None
     if how == "s3fd":
         ls, det, dev = _s3fd_detector()
     cap = cv2.VideoCapture(path)
@@ -270,3 +299,27 @@ def face_match(image, reference, max_scale: float = 2.2, log=print):
             break
     log(f"[OneShotMV] face match: scale {sc:.2f}, shift {dx:+.2f} {dy:+.2f}")
     return out
+
+
+def frame_photo(src: str, dst: str, size) -> str:
+    """A copy of a character photo cut to `size`'s aspect around the largest face (some headroom
+    above it), so a model that keeps the photo's shape and a centre crop to the video frame don't
+    lose the head. Without a face the top of a tall photo is kept. Returns dst (src when unreadable)."""
+    import cv2
+    img = cv2.imread(src, cv2.IMREAD_COLOR)
+    if img is None:
+        return src
+    h, w = img.shape[:2]
+    a = size[0] / size[1]
+    face = detect(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    cx, cy = (face[0] * w, face[1] * h) if face else (w / 2, h * 0.2)
+    if w / h > a:   # too wide: keep the full height, centre on the face
+        cw = round(h * a)
+        x0 = int(min(max(cx - cw / 2, 0), w - cw))
+        img = img[:, x0:x0 + cw]
+    else:           # too tall: keep the full width, the face 42% down the frame
+        ch = round(w / a)
+        y0 = int(min(max(cy - 0.42 * ch, 0), h - ch))
+        img = img[y0:y0 + ch]
+    cv2.imwrite(dst, img)
+    return dst
