@@ -47,8 +47,9 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
 
 1. **The Brief.** Name the project, then drop in a song. The waveform shows the low, medium and
    high energy sections and the stretch the video will use: drag the box to move it, click or
-   drag anywhere to listen from there. Optionally add a **Character** photo: every singer
-   becomes that person, dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
+   drag anywhere to listen from there. Optionally add **Characters**, one photo per person (up
+   to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
+   that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
    Pick a length, a World (four examples, or write your own) and the output (format and
    quality). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,

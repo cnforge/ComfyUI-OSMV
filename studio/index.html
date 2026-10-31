@@ -333,6 +333,16 @@ html[data-look="neon"] .lvl i{border-radius:2px}
 .strip .fixhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.04em;color:#fff;background:rgba(8,10,13,.55);opacity:0;transition:opacity .12s}
 .strip button:hover .fixhint,.strip button:focus-visible .fixhint{opacity:1}
 #vid.tall{max-height:78vh;width:auto;margin:0 auto;display:block}
+.chars{display:flex;flex-wrap:wrap;gap:12px}
+.charcard{position:relative;margin:0;width:132px;border-radius:12px;overflow:hidden;background:var(--panel2);border:1px solid var(--line2)}
+.charcard img{display:block;width:100%;height:150px;object-fit:contain;background:var(--panel3)}
+.charcard figcaption{display:flex;gap:6px;align-items:baseline;padding:6px 8px;font-size:12px;min-width:0}
+.charcard figcaption b{color:var(--title)}
+.charcard figcaption span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.charcard .btn{position:absolute;top:6px;right:6px;min-height:26px;padding:0 8px;background:rgba(8,10,13,.7)}
+.charadd{width:132px;min-height:182px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border-radius:12px;border:1.5px dashed var(--line3);background:none;color:var(--muted);font:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.charadd span{font-size:28px;line-height:1;color:var(--title)}
+.charadd:hover,.charadd.over{color:var(--text);border-color:var(--title)}
 .strip .lk{position:absolute;left:4px;bottom:4px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:rgba(8,10,13,.7);color:#fff;pointer-events:none}
 .worldmore summary{display:flex;align-items:baseline;gap:12px;cursor:pointer;list-style:none}
 .worldmore summary::-webkit-details-marker{display:none}
@@ -497,7 +507,7 @@ const WORLDS = [
 // cut choices: the value the Director takes, and its plain-words label
 const CUTS = [["every 2 bars","Slow: every 2 bars"],["every bar","Steady: every bar"],["to the music (subtle)","On the beat"],["to the music (intense)","Fast, on the beat"]];
 const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
-const DEFAULT_BRIEF = {name:"", song:"", character:"", theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
+const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
   looks:"auto", framing:"mixed", broll_style:"mix"};
 
@@ -507,6 +517,7 @@ const store = {
   set(k, v){ try{ localStorage.setItem("osmv."+k, JSON.stringify(v)); }catch(e){} },
 };
 const S = { brief: Object.assign({}, DEFAULT_BRIEF, store.get("brief", {})), songs: null, analysis: null, sys: null, timer: null };
+if (S.brief.character){ S.brief.characters = [S.brief.character]; delete S.brief.character; }  // briefs from before several photos
 
 // ---------------------------------------------------------------- helpers
 const $ = (s, el=document) => el.querySelector(s);
@@ -741,8 +752,7 @@ async function viewBrief(){
     </section>
 
     <section class="card" aria-labelledby="charh">
-      <div class="row"><h2 class="label" id="charh">Character</h2><span class="muted" style="font-size:13px">optional</span>
-        <span style="margin-left:auto" class="row"><button class="btn sm hide" id="charnew" type="button">New photo</button><button class="btn sm hide" id="charoff" type="button">Remove</button></span></div>
+      <div class="row"><h2 class="label" id="charh">Characters</h2><span class="muted" style="font-size:13px">optional</span></div>
       <div id="charpick" style="margin-top:14px"></div>
       <p class="note" id="charnote"></p>
     </section>
@@ -1052,40 +1062,48 @@ async function upload(file){
   if (name){ S.brief.song = name; S.brief.start = -1; saveBrief(); drawSong(); }
 }
 
-// the character photo: every portrait in the video becomes this person, in the World's outfits,
-// places and light (the Director's one-artist mode)
+// the character photos: every singer becomes one of these people, in the World's outfits,
+// places and light; the singers take the photos in turn (the Director's one-artist mode)
+const MAX_CHARS = 8;
 function drawChar(){
   const b = S.brief, pick = $("#charpick");
   if (!pick) return;
-  $("#charnew").classList.toggle("hide", !b.character); $("#charoff").classList.toggle("hide", !b.character);
+  const cs = b.characters || (b.characters = []);
   const miss = (S.models && S.models.missing_character) || [];
   const note = $("#charnote");
   note.textContent = miss.length ? `A character run needs ${miss.length === 1 ? "one more file" : miss.length + " more files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`
-    : b.character ? "Every singer in the video is this person, dressed and placed by the World line. Use a photo of someone who agreed to this."
-    : "Add a photo of one person and every singer in the video becomes them. Without one, every face is invented.";
+    : cs.length > 1 ? `The singers take turns: shot 1 is A, shot 2 is B and so on, and each shot's quick looks stay that person. Use photos of people who agreed to this.`
+    : cs.length ? "Every singer in the video is this person, dressed and placed by the World line. Add more photos to cast several people. Use photos of people who agreed to this."
+    : "Add photos of one person each, and every singer in the video becomes one of them. Without any, every face is invented.";
   note.classList.toggle("warn", !!miss.length);
-  const choose = async f => { if (!f) return; const name = await toInput(f, "photo"); if (name){ b.character = name; saveBrief(); drawChar(); } };
-  if (b.character){
-    const parts = b.character.split("/"), q = new URLSearchParams({filename: parts.pop(), subfolder: parts.join("/"), type: "input"});
-    pick.innerHTML = `<div class="row" style="gap:14px"><img src="/api/view?${q}" alt="The character photo" style="height:140px;width:auto;max-width:240px;object-fit:contain;border-radius:12px;background:var(--panel3)"><span style="font-weight:700;word-break:break-all">${esc(b.character.split("/").pop())}</span></div>`;
+  const add = async files => {
+    for (const f of [...files].slice(0, MAX_CHARS - cs.length)){ const name = await toInput(f, "photo"); if (name) cs.push(name); }
+    saveBrief(); drawChar(); };
+  const view = c => { const parts = c.split("/"); return "/api/view?" + new URLSearchParams({filename: parts.pop(), subfolder: parts.join("/"), type: "input"}); };
+  if (cs.length){
+    pick.innerHTML = `<div class="chars">${cs.map((c, i) => `<figure class="charcard"><img src="${view(c)}" alt="Character ${String.fromCharCode(65 + i)}">
+        <figcaption><b>${String.fromCharCode(65 + i)}</b><span>${esc(c.split("/").pop())}</span></figcaption>
+        <button type="button" class="btn sm ghost" data-rm="${i}" aria-label="Remove character ${String.fromCharCode(65 + i)}">✕</button></figure>`).join("")}
+      ${cs.length < MAX_CHARS ? `<button type="button" class="charadd" id="chardrop" aria-label="Add a character photo"><span aria-hidden="true">+</span>Add a photo</button>` : ""}</div>`;
+    pick.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => { cs.splice(+el.dataset.rm, 1); saveBrief(); drawChar(); });
   } else {
-    pick.innerHTML = `<div class="drop" id="chardrop" tabindex="0" role="button" aria-label="Upload a character photo">
-        <div style="font-weight:700;font-size:16px">Drop a photo of the person here, or click to upload</div>
-        <div class="muted" style="font-size:13px">One person, face clearly visible. JPG, PNG or WebP.</div>
+    pick.innerHTML = `<div class="drop" id="chardrop" tabindex="0" role="button" aria-label="Upload character photos">
+        <div style="font-weight:700;font-size:16px">Drop photos here, or click to upload</div>
+        <div class="muted" style="font-size:13px">One person per photo, face clearly visible. Up to ${MAX_CHARS}. JPG, PNG or WebP.</div>
       </div>`;
-    const dz = $("#chardrop");
-    dz.onclick = () => $("#charfile").click();
-    dz.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); $("#charfile").click(); } };
-    dz.ondragover = e => { e.preventDefault(); dz.classList.add("over"); };
-    dz.ondragleave = () => dz.classList.remove("over");
-    dz.ondrop = e => { e.preventDefault(); dz.classList.remove("over"); choose(e.dataTransfer.files[0]); };
   }
   let fi = $("#charfile");
-  if (!fi){ fi = document.createElement("input"); Object.assign(fi, {type: "file", id: "charfile", accept: "image/*", className: "hide"}); document.body.append(fi); }
-  fi.onchange = () => { choose(fi.files[0]); fi.value = ""; };
-  $("#charnew").onclick = () => fi.click();
-  $("#charoff").onclick = () => { b.character = ""; saveBrief(); drawChar(); };
-  const fine = $("#finep"); if (fine) fine.textContent = b.character ? "Use music and a photo you have the rights to." : "Use music you have the rights to. Every face is invented.";
+  if (!fi){ fi = document.createElement("input"); Object.assign(fi, {type: "file", id: "charfile", accept: "image/*", multiple: true, className: "hide"}); document.body.append(fi); }
+  fi.onchange = () => { add(fi.files); fi.value = ""; };
+  const dz = $("#chardrop");
+  if (dz){
+    dz.onclick = () => fi.click();
+    dz.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); fi.click(); } };
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add("over"); };
+    dz.ondragleave = () => dz.classList.remove("over");
+    dz.ondrop = e => { e.preventDefault(); dz.classList.remove("over"); add(e.dataTransfer.files); };
+  }
+  const fine = $("#finep"); if (fine) fine.textContent = cs.length ? "Use music and photos you have the rights to." : "Use music you have the rights to. Every face is invented.";
 }
 
 async function start(render, briefOverride){

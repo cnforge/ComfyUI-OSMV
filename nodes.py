@@ -241,7 +241,8 @@ class FVDirector:
                         "tooltip": "mixed = wide, medium and close shots in quiet stretches, tighter in the "
                                    "build, close-ups on the drop; close = close-ups only"}),
             "artist_image_path": ("STRING", {"default": "",
-                                  "tooltip": "One-artist mode: a photo of the singer (uses the artist pack)"}),
+                                  "tooltip": "One-artist mode: a photo of the singer (uses the artist pack). "
+                                             "Several photos joined with | cast the singers in turn"}),
             "artist_image": ("IMAGE", {"tooltip": "One-artist mode: connect a Load Image with the singer's photo "
                                                   "(instead of artist_image_path)"}),
             "dance_video": ("VIDEO", {"tooltip": "Motion mode: connect a Load Video with the dance clip "
@@ -320,7 +321,7 @@ class FVDirector:
                               seed=seed, twins=twins, dance_path=_resolve(dance_video_path), run_name=run_name,
                               queue=queue_renders, editor=twin_editor, guide_strength=guide_strength,
                               queue_assemble=queue_assemble, framing=framing,
-                              artist_path=_resolve(artist_image_path) if artist_image_path else "",
+                              artist_path="|".join(_resolve(x) for x in artist_image_path.split("|") if x.strip()),
                               qc_retries=qc_retries, theme=theme or "", broll_share=broll_share,
                               broll_style=broll_style, staged=staged,
                               look_groups=look_groups,

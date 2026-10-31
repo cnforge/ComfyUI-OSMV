@@ -208,16 +208,30 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     if cuts:  # the chosen cut per energy level (low / medium / high), over the pack's defaults
         pk["edit"] = dict(pk["edit"], **{f"cut_{lv}": m for lv, m in cuts.items() if m})
     if mode == "voice":
-        if pk["casting"].get("artist") and not (artist_path and os.path.exists(artist_path)):
+        # artist_path: one photo, or several joined with "|" (the singers take them in turn)
+        artist_paths = [x.strip() for x in (artist_path or "").split("|") if x.strip()]
+        if pk["casting"].get("artist") and not artist_paths:
             raise ValueError("the artist pack needs artist_image_path (one photo of the artist)")
-        if artist_path:  # cut to the frame's shape around the face (Qwen keeps the photo's shape)
+        gone = [x for x in artist_paths if not os.path.exists(x)]
+        if gone:
+            raise ValueError(f"character photo not found: {', '.join(gone)}")
+        if artist_paths:  # cut to the frame's shape around the face (Qwen keeps the photo's shape)
             from . import faces
             os.makedirs(run_dir, exist_ok=True)
-            artist_path = faces.frame_photo(artist_path, os.path.join(run_dir, "character.png"),
-                                            formats.portrait_size(fmt)[1])
+            artist_paths = [faces.frame_photo(x, os.path.join(run_dir, f"character{'' if i == 0 else f'_{i + 1}'}.png"),
+                                              formats.portrait_size(fmt)[1]) for i, x in enumerate(artist_paths)]
+        artist_path = artist_paths[0] if artist_paths else ""
         p = planner.plan_voice(tl, pk, fmt=fmt, preset=preset, seconds=seconds, start=start, seed=seed,
                                twins=None if twins == "auto" else twins, framing=framing)
         p["artist_path"] = artist_path
+        if artist_paths:  # the leads take the photos in turn; a look is its lead's person
+            p["artist_paths"] = artist_paths
+            leads = {r["id"]: r for r in p["renders"] if r["role"] == "A"}
+            for k, rid in enumerate(sorted(leads)):
+                leads[rid]["character"] = k % len(artist_paths)
+            for r in p["renders"]:
+                if r["role"] == "B" and r.get("twin_of") in leads:
+                    r["character"] = leads[r["twin_of"]].get("character", 0)
         if cuts:  # a re-applied theme starts from the pack again: keep the chosen cuts
             p["cuts"] = planner.cut_modes(pk["edit"])
         if bible and (pk.get("casting") or {}).get("unique"):
@@ -290,6 +304,8 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         p["cast_order"], p["crowd"] = (cast_order or "as written"), pk["casting"]["crowd_mode"]
         cast = casting.cast_voice(pk, p["performers"], seed, sizes, fmt=fmt, leads=leads, phases=phases)
         s1, s2 = formats.portrait_size(fmt)
+        char_of = {r["performer"]: r.get("character", 0) for r in p["renders"] if r["role"] in ("A", "B")}
+        photo_of = lambda performer: (p.get("artist_paths") or [artist_path])[char_of.get(performer, 0)]
         port = {}
         need_portrait = {r["performer"] for r in p["renders"] if r["role"] == "A" or editor == "qwen"}
         for c in cast:
@@ -297,7 +313,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                 continue
             name = f"p{c['id']:03d}"
             if c.get("artist_edit"):
-                jobs.append((name, graphs.artist_portrait(artist_path=artist_path, prompt=c["portrait"],
+                jobs.append((name, graphs.artist_portrait(artist_path=photo_of(c["id"]), prompt=c["portrait"],
                                                           seed=c["seed"], prefix=f"{rel}/{name}", size2=s2).nodes))
             else:
                 jobs.append((name, graphs.krea2_portrait(prompt=c["portrait"], seed=c["seed"],
@@ -343,7 +359,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
             jobs.append((f"k{r['id']:03d}", graphs.twin_key(
                 video_path=a["path"], portrait_path=port.get(r["performer"]), prefix=f"{rel}/k{r['id']:03d}",
                 size=rsize, seed=seed + r["id"], editor=editor, start_s=r.get("guide_start", 0.0),
-                identity_path=artist_path if (c.get("artist_edit") and artist_path) else None,
+                identity_path=photo_of(r["performer"]) if (c.get("artist_edit") and artist_path) else None,
                 prompt=(cast[look_of].get("twin_prompt") if c.get("artist_edit") else
                         " ".join(graphs.TWIN_TEXT.format(**c["twin"]).split()) + " " +
                         casting.edit_realism(cast[a["performer"]].get("size", "close") == "close"))
@@ -934,12 +950,13 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
         vocal, sr = stems.read_wav(vp)
     report, redo = [], []
     # artist runs: the artist's face, to catch looks that turned into someone else
-    ref = None
+    refs = []
     if voice and p.get("artist_path"):
         try:
             from . import identity
-            if identity.available() and os.path.exists(p["artist_path"]):
-                ref = identity.embed_path(p["artist_path"])
+            if identity.available():
+                refs = [identity.embed_path(x) if os.path.exists(x) else None
+                        for x in (p.get("artist_paths") or [p["artist_path"]])]
         except Exception as e:
             log(f"[OneShotMV] identity check off ({e})")
 
@@ -947,6 +964,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
         if not voice or r["role"] not in ("A", "B"):
             return {}
         # a look takes its lead's framing (Face Match), so only leads are judged for "too close"
+        ref = refs[r.get("character", 0)] if r.get("character", 0) < len(refs) else None
         return {"framing": r.get("size", "close") if r["role"] == "A" else "look", "ref": ref,
                 "key_path": r.get("key") if r["role"] == "B" else None}
 
@@ -1127,6 +1145,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
                 bad = qc.image_bars(old_p) >= qc.THRESH["bars"]  # the bars are in the still itself
                 try:
                     from . import identity
+                    ref = checks(r).get("ref")
                     rep = identity.image_report(old_p, ref) if identity.available() else {}
                     lim = qc.THRESH["tooclose"].get(r.get("size", ""))
                     bad = bad or (rep.get("face_frac", 1.0) < 1.0 or (lim is not None and rep.get("face_h", 0.0) > lim)
@@ -1258,7 +1277,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
               (f"; kept best take for {', '.join(bad)}" if bad else "") + \
               (f"; {nb} b-roll cutaway(s) queued" if post else "") + looks_msg + \
               ("; assembling" if then_assemble and stage != "leads" else "")
-    if ref is not None:
+    if any(x is not None for x in refs):
         try:
             from . import identity
             identity.free()

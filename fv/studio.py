@@ -375,6 +375,12 @@ def _pick(v, ok: tuple):
     return v if v in ok else ok[0]
 
 
+def _characters(b: dict) -> list:
+    """The brief's character photos (characters: a list; character: one, from older briefs)."""
+    c = b.get("characters")
+    return [x for x in c if x][:8] if isinstance(c, list) else ([b["character"]] if b.get("character") else [])
+
+
 def _director_graph(b: dict) -> dict:
     cuts = {k: b.get(k) for k in ("cuts_low", "cuts_medium", "cuts_high") if b.get(k)}
     d = {"audio": ["1", 0], "mode": "voice", "pack": "crowd", "format": b.get("format", "16:9"),
@@ -390,8 +396,8 @@ def _director_graph(b: dict) -> dict:
          "crowd": b.get("crowd", "auto"), **cuts}
     if b.get("models") in ("auto", "24gb", "full") and _director_has("models"):
         d["models"] = b["models"]
-    if b.get("character"):  # every portrait becomes this person (the Director's one-artist mode)
-        d["artist_image_path"] = _input_path(b["character"], "photo")
+    if _characters(b):  # every singer becomes one of these people (the Director's one-artist mode)
+        d["artist_image_path"] = "|".join(_input_path(x, "photo") for x in _characters(b))
     return {"1": {"class_type": "LoadAudio", "inputs": {"audio": b["song"]}},
             "2": {"class_type": "FVDirector", "inputs": d}}
 
@@ -1290,11 +1296,11 @@ async def _api(request: web.Request, route: str) -> web.Response:
             if not body.get("song"):
                 return web.json_response({"error": "pick a song first"}, status=400)
             _input_path(body["song"])
-            if body.get("character"):
-                _input_path(body["character"], "photo")
+            for x in _characters(body):
+                _input_path(x, "photo")
             if body.get("render"):  # refuse now, not after minutes of planning
                 why = await _blocking(lambda: _fv("graphs").not_ready(body.get("models") or "auto",
-                                                                      artist=bool(body.get("character"))))
+                                                                      artist=bool(_characters(body))))
                 if why:
                     return web.json_response({"error": f"Can't render on this ComfyUI yet: {why}."}, status=400)
             try:
