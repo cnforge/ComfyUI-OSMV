@@ -430,12 +430,12 @@ def _job(pid: str) -> dict:
         for it in node_out.get("text", []) or []:
             if isinstance(it, dict) and it.get("filename") == "jobs.json":
                 run = it.get("subfolder", "").rstrip("/").split("/")[-1]
-    if run and rec.get("project"):
+    if run and (rec.get("project") or rec.get("director")):
         try:
             sj = os.path.join(_run_dir(run), "studio.json")
             if not os.path.isfile(sj):
-                with open(sj, "w", encoding="utf-8") as f:
-                    json.dump({"project": rec["project"]}, f)
+                with open(sj, "w", encoding="utf-8") as f:  # the graph: "Open in ComfyUI" loads it
+                    json.dump({"project": rec.get("project", ""), "director": rec.get("director")}, f)
         except Exception:
             pass
     return {"state": "done", "run": run}
@@ -661,7 +661,7 @@ def _run(name: str) -> dict:
         "edl": _view(done.get("edl", "")) if done and done.get("edl") and os.path.isfile(done["edl"]) else "",
         "finished_at": (done or {}).get("at", ""),
         "song": _view(os.path.join(d, "song.wav")) if os.path.isfile(os.path.join(d, "song.wav")) else "",
-        "versions": _versions(d, p), "pickup": _pickup_state(d, p, done),
+        "versions": _versions(d, p), "pickup": _pickup_state(d, p, done), "vertical": _vertical(done),
         "finish": _finish_settings(p), "fx_now": (done or {}).get("fx") or p.get("fx_level") or "subtle",
         "fx_levels": (done or {}).get("fx_levels") or _fv("assemble").fx_levels(p),
         "looks": [{"id": "none", "name": "None"}] + [{"id": k, "name": _look_names().get(k, k)} for k in SHOWN_LOOKS],
@@ -763,6 +763,37 @@ def _versions(d: str, p: dict) -> list[dict]:
         out.append({"name": os.path.basename(f).split("_")[0], "url": _view(f),
                     "when": _dt.datetime.fromtimestamp(os.path.getmtime(f)).isoformat(timespec="minutes")})
     return out
+
+
+def _vertical(done: dict | None) -> str:
+    """The 9:16 crop of the current cut, when there is one made from it."""
+    from .reframe import out_path
+    v = out_path(done["video"]) if done and done.get("video") else ""
+    return _view(v) if v and os.path.isfile(v) and os.path.getmtime(v) >= os.path.getmtime(done["video"]) else ""
+
+
+def _reframe(name: str) -> dict:
+    d = _run_dir(name)
+    if not os.path.isfile(os.path.join(d, "done.json")):
+        raise ValueError("this run has no finished cut yet")
+    _fv("reframe").reframe(d)
+    return {"vertical": _vertical(_load(os.path.join(d, "done.json")))}
+
+
+def _graph(name: str, job: str = "") -> dict:
+    """The graph that made a run (the Director's, with the Studio's settings) or one of its jobs
+    (job: a take's file stem like r004A, or a job file's name)."""
+    d = _run_dir(name)
+    title = _project(d) or os.path.basename(d)
+    if not job:
+        g = (_load(os.path.join(d, "studio.json"), {}) or {}).get("director")
+        if not g:
+            raise ValueError("this run doesn't have its Director graph saved (runs started in the Studio keep it)")
+        return {"name": f"OneShot MV - {title}", "graph": g}
+    jf = _find_job(d, job) or os.path.join(d, "jobs", os.path.basename(job))
+    if not os.path.isfile(jf):
+        raise ValueError(f"no job '{job}' in this run")
+    return {"name": f"OneShot MV - {title} - {_stem(os.path.basename(jf)).removesuffix('.json')}", "graph": _load(jf, {})}
 
 
 def _keep_version(d: str) -> None:
@@ -1229,6 +1260,11 @@ async def _api(request: web.Request, route: str) -> web.Response:
         return web.json_response(await _blocking(lambda: _fv("graphs").models_report()))
     if route == "runs":
         return web.json_response(await _blocking(_runs))
+    if route.startswith("graph/"):  # a run's ComfyUI graph (API format) for the ComfyUI tab to open
+        try:
+            return web.json_response(await _blocking(_graph, route[6:], q.get("job", "")))
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=404)
     if route.startswith("xml/"):
         path = await _blocking(_xml, route[4:])
         stem = _file_stem(_project(os.path.dirname(path))) or os.path.basename(os.path.dirname(path))
@@ -1269,10 +1305,12 @@ async def _api(request: web.Request, route: str) -> web.Response:
             if project and not body.get("run_name"):
                 slug = re.sub(r"[^a-z0-9]+", "-", project.lower()).strip("-")[:40] or "video"
                 body["run_name"] = f"{slug}-{_dt.datetime.now().strftime('%Y%m%d-%H%M')}"
-            pid = await _blocking(_queue_graph, _director_graph(body))
+            graph = _director_graph(body)
+            pid = await _blocking(_queue_graph, graph)
             import time
             with open(os.path.join(_jobs_dir(), re.sub(r"[^0-9a-f-]", "", pid) + ".json"), "w", encoding="utf-8") as f:
-                json.dump({"t": time.time(), "estimate": est, "render": bool(body.get("render")), "project": project}, f)
+                json.dump({"t": time.time(), "estimate": est, "render": bool(body.get("render")), "project": project,
+                           "director": graph}, f)
             return web.json_response({"prompt_id": pid, "estimate": est})
         if route == "recut":
             d = _run_dir(body.get("run", ""))
@@ -1302,6 +1340,12 @@ async def _api(request: web.Request, route: str) -> web.Response:
                                                             "fx_intensity": 1.0, "finish": True, "audio_fx": "from the run"}}}
             pid = await _blocking(_queue_graph, g)
             return web.json_response({"prompt_id": pid})
+        if route == "reframe":
+            try:
+                res = await _blocking(_reframe, body.get("run", ""))
+            except ValueError as e:
+                return web.json_response({"error": str(e)}, status=400)
+            return web.json_response(res)
         if route == "sharpen":
             try:
                 res = await _blocking(_sharpen, body.get("run", ""), bool(body.get("dry")))

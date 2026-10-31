@@ -332,6 +332,7 @@ html[data-look="neon"] .lvl i{border-radius:2px}
 .strip .sn{position:absolute;left:3px;top:3px;font:600 10px/1 var(--mono);background:rgba(8,10,13,.7);color:#fff;border-radius:4px;padding:2px 4px}
 .strip .fixhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.04em;color:#fff;background:rgba(8,10,13,.55);opacity:0;transition:opacity .12s}
 .strip button:hover .fixhint,.strip button:focus-visible .fixhint{opacity:1}
+#vid.tall{max-height:78vh;width:auto;margin:0 auto;display:block}
 .strip .lk{position:absolute;left:4px;bottom:4px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:rgba(8,10,13,.7);color:#fff;pointer-events:none}
 .worldmore summary{display:flex;align-items:baseline;gap:12px;cursor:pointer;list-style:none}
 .worldmore summary::-webkit-details-marker{display:none}
@@ -471,7 +472,7 @@ html[data-look="neon"] .eta-b{font-stretch:condensed;font-variation-settings:'wd
   <div class="topright">
     <span class="chip" id="sys"><span class="led" aria-hidden="true"></span>ComfyUI</span>
     <a class="toplink" href="#/videos">Your videos</a>
-    <a class="toplink" href="/" target="_blank" rel="noopener">Open ComfyUI</a>
+    <a class="toplink" id="comfy" href="/" target="_blank" rel="noopener">Open ComfyUI</a>
   </div>
 </header>
 <main id="app" aria-live="polite"></main>
@@ -663,6 +664,8 @@ function saveBrief(){ store.set("brief", S.brief); }
 // the project name: saved with the run (studio.json); in demo mode the brief's name stands in
 const projectOf = r => (r && r.project) || (DEMO && r ? ((store.get("briefs", {})[r.run] || {}).name || "") : "");
 const fileStem = r => (projectOf(r).replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80)) || r.run;
+// the file stem of a run's take ("r004A") from its /api/view URL, for opening its job in ComfyUI
+const takeStem = url => (new URLSearchParams(String(url).split("?")[1] || "").get("filename") || "").replace(/_00001_.*$/, "");
 // a song file's name as a title: no folder, extension or "(Official Music Video)"-style tags
 const songTitle = f => String(f || "").split("/").pop().replace(/\.[^.]+$/, "").replace(/\s*[(\[][^)\]]*[)\]]/g, "").replace(/[_]+/g, " ").trim().slice(0, 80) || "Untitled";
 function stopTimer(){ if (S.timer){ clearInterval(S.timer); S.timer = null; } }
@@ -682,6 +685,10 @@ function route(){
   stopTimer();
   const h = location.hash.replace(/^#\/?/, "").split("/");
   const [page, run] = [h[0] || "", decodeURIComponent(h.slice(1).join("/") || "")];
+  // on a run's screens ComfyUI opens with that run's Director graph (web/oneshot_mv.js loads it)
+  const onRun = run && ["plan", "render", "result"].includes(page);
+  $("#comfy").href = onRun ? "/?oneshot=" + encodeURIComponent(run) : "/";
+  $("#comfy").title = onRun ? "Opens ComfyUI with the graph that made this video" : "";
   if (page === "plan" && run) return viewPlan(run);
   if (page === "render" && run) return viewRender(run);
   if (page === "result" && run) return viewResult(run);
@@ -1287,15 +1294,35 @@ async function viewResult(run){
           <label class="slider"><span>Intensity</span><input type="range" id="vg" min="0" max="95" step="1"><b class="mono" id="vgv"></b></label></div></section>
       <div class="applybar"><button class="btn" id="apply" type="button" disabled style="width:100%">No changes yet</button>
         <p class="tiny center" style="margin:8px 0 0">A new cut with these settings; nothing re-renders. The cut before is kept as a version.</p></div>
+      ${r.brief.format === "16:9" ? `<section class="card ed vert" aria-labelledby="verth"><h3 id="verth">9:16 version</h3>
+        <p class="tiny" style="margin:6px 0 12px">For Reels, TikTok and Shorts: each shot cropped around the singer's face, held still or following them, never moving across a cut. About a minute; nothing re-renders.</p>
+        <button class="btn" id="vmake" type="button" style="width:100%"></button></section>` : ""}
     </aside>
   </div>`;
   const vid = $("#vid");
   // versions
   const vers = [{url: r.video, label: "Current cut"}].concat((r.versions || []).slice().reverse().map(v => ({url: v.url, label: `${v.name} · earlier cut`})));
+  if (r.vertical) vers.splice(1, 0, {url: r.vertical, label: "9:16 crop", tall: true});
   let curV = 0;
   const drawVers = () => { $("#vers").classList.toggle("hide", vers.length < 2); $("#vers").innerHTML = vers.map((v,i) => `<button type="button" class="opt" data-i="${i}" aria-pressed="${i===curV}">${esc(v.label)}</button>`).join("");
-    $("#vers").querySelectorAll(".opt").forEach(el => el.onclick = () => { curV = +el.dataset.i; const t = vid.currentTime; vid.src = vers[curV].url; vid.currentTime = t; $("#dl").href = vers[curV].url; drawVers(); }); };
+    $("#vers").querySelectorAll(".opt").forEach(el => el.onclick = () => { curV = +el.dataset.i; const t = vid.currentTime; vid.src = vers[curV].url; vid.currentTime = t; $("#dl").href = vers[curV].url;
+      $("#dl").download = fileStem(r) + (vers[curV].tall ? "_9x16" : "") + ".mp4"; vid.classList.toggle("tall", !!vers[curV].tall); drawVers(); }); };
   drawVers();
+  // the 9:16 crop: made on request, then one of the versions above the player
+  const vmake = $("#vmake");
+  if (vmake){
+    vmake.textContent = r.vertical ? "Show the 9:16 version" : "Make the 9:16 version";
+    vmake.onclick = async () => {
+      if (!r.vertical){
+        try{ overlay("Making the 9:16 version", "Finding the singer in every shot, then cropping. About a minute.");
+          r.vertical = (await api("reframe", {run: r.run})).vertical; overlay(); }
+        catch(e){ overlay(); toast("The 9:16 version didn't work: " + e.message, 9000); return; }
+        vers.splice(1, 0, {url: r.vertical, label: "9:16 crop", tall: true});
+        vmake.textContent = "Show the 9:16 version"; drawVers();
+      }
+      $("#vers").querySelector('.opt[data-i="1"]').click(); vid.scrollIntoView({behavior: "smooth", block: "center"});
+    };
+  }
   // shots: the one under the playhead, picking one to fix
   const shotAt = t => r.shots.find(s => t >= s.t0 && t < s.t1) || r.shots[r.shots.length - 1];
   const strip = $("#strip");
@@ -1304,7 +1331,7 @@ async function viewResult(run){
     if (b.offsetLeft < strip.scrollLeft || b.offsetLeft + b.offsetWidth > strip.scrollLeft + strip.clientWidth)
       strip.scrollTo({left: b.offsetLeft - strip.clientWidth / 2 + b.offsetWidth / 2, behavior: "smooth"}); };
   let nowN = null;
-  vid.ontimeupdate = () => { const s = shotAt(vid.currentTime); if (!s) return; $("#nowt").textContent = clock(vid.currentTime);
+  vid.ontimeupdate = () => { const s = shotAt(vid.currentTime); if (!s || !$("#nowt")) return; $("#nowt").textContent = clock(vid.currentTime);
     if (s.n === nowN) return; nowN = s.n;
     strip.querySelectorAll("button").forEach(b => b.classList.toggle("now", +b.dataset.n === s.n)); if (P.sel == null) reveal(s.n); };
   strip.querySelectorAll("button").forEach(el => el.onclick = () => { vid.currentTime = +el.dataset.t + 0.05; selectShot(+el.dataset.n); });
@@ -1337,7 +1364,8 @@ async function viewResult(run){
         </div>
         <div class="stack" style="gap:10px"><label class="field">Notes for the re-shoot (optional)<textarea id="pnote" rows="3" placeholder="${P.mode==="recast" ? "Like “a woman in her seventies, in bright midday sun”" : "Like “the camera holds still, nobody else walks in”"}"></textarea></label>
           <button class="btn" id="addpk" type="button">${queued ? "Update this pickup" : "Add to pickups"}</button></div>
-      </div></div>`;
+      </div>
+      ${(look < 0 ? s.clip : looks[look].clip) ? `<p class="tiny" style="margin:10px 0 0"><a href="/?oneshot=${encodeURIComponent(r.run)}&job=${encodeURIComponent(takeStem(look < 0 ? s.clip : looks[look].clip))}" target="_blank" rel="noopener">Open this take's workflow in ComfyUI</a></p>` : ""}</div>`;
     const ta = $("#pnote"); ta.value = P.note; ta.oninput = () => { P.note = ta.value; };
     $("#fxclose").onclick = () => { P.sel = null; strip.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", "false")); drawFix(); };
     $("#modes").querySelectorAll(".tier").forEach(el => el.onclick = () => { P.mode = el.dataset.m; P.note = ta.value; drawFix(); });

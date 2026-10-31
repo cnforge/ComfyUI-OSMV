@@ -67,6 +67,10 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
      (the quick cut-ins of other looks), you can pick just one of them. Pick several takes and
      only those shoot again, together; everything else stays as it is, the video is cut again,
      and the cut before stays as a version you can switch back to.
+   - Make a 9:16 version of a 16:9 video: each shot cropped around the singer's face, held still
+     or following them, never moving across a cut (softer than rendering at 9:16).
+   - Open in ComfyUI: the top bar's link opens ComfyUI with the graph that made the video, and a
+     shot's panel opens one take's own workflow (runs started in the Studio keep their graph).
    - Change the post processing without re-rendering anything: audio-reactive FX for low, medium
      and high energy sections (None, Subtle or Intense), a color grade (None, Neon Saturated,
      Technicolor, Teal & Orange, Golden Hour, Warm Romantic, Soft Eterna, Low Key, Industrial
