@@ -255,6 +255,12 @@ class FVDirector:
                             "tooltip": "mix: a World character in a candid moment over weak lip sync, performers "
                                        "dancing (medium shots, not singing) in instrumental gaps; world or dance: "
                                        "one kind everywhere"}),
+            "fps": (["auto", "24", "25", "30", "50"], {"default": "auto",
+                    "tooltip": "The video's frame rate. auto = 25 (the clips render at 50 fps at quality, "
+                               "25 at fast); 25 and 50 are the smoothest, 24 and 30 now and then repeat a frame"}),
+            "resolution": (["1080", "720", "1440", "2160"], {"default": "1080",
+                           "tooltip": "The video's short side in pixels (1080 = 1920x1080 at 16:9). The clips are "
+                                      "scaled up to it, so 1440 and 2160 are bigger files, not more detail"}),
             "qc_retries": ("INT", {"default": 2, "min": 0, "max": 3,
                            "tooltip": "Check every take (missing, frozen, blown out, dead mouth, a cut or drift away "
                                       "from the shot, and lip sync with SyncNet if its weights are installed) and "
@@ -309,7 +315,7 @@ class FVDirector:
             dance_video_path="", run_name="", twin_editor="klein", guide_strength=1.0, queue_assemble=True,
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
-            cast_order="as written", crowd="auto", models="auto"):
+            cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080"):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -327,7 +333,8 @@ class FVDirector:
                               look_groups=look_groups,
                               cuts={"low": cuts_low, "medium": cuts_medium, "high": cuts_high},
                               audio_fx=audio_fx or "", cast_order=cast_order or "as written",
-                              crowd=crowd or "auto", models=models or "auto")
+                              crowd=crowd or "auto", models=models or "auto",
+                              fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080))
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}

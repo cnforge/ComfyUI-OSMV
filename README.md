@@ -51,8 +51,8 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
    to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
    that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
-   Pick a length, a World (four examples, or write your own) and the output (format and
-   quality). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
+   Pick a length, a World (four examples, or write your own) and the output (format, quality,
+   frame rate and size: 24, 25, 30 or 50 fps; 720p to 4K, scaled up from the render). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
    close-ups only, crowd, cast order, seed), the take check's retries and the model versions.
    The project name is optional (the song's title otherwise). The buttons say how long the plan
    and the video will take.

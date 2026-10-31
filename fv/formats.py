@@ -58,8 +58,17 @@ def stage_sizes(fmt: str, preset: str) -> list[tuple[int, int]]:
     return out
 
 
-def deliver_size(fmt: str) -> tuple[int, int]:
-    return FORMATS[fmt]["deliver"]
+RESOLUTIONS = (720, 1080, 1440, 2160)  # the delivery's short side
+FRAME_RATES = (24, 25, 30, 50)  # 25 and 50 divide the 50 fps clips evenly; 24 and 30 now and then repeat a frame
+
+
+def deliver_size(fmt: str, resolution: int | None = None) -> tuple[int, int]:
+    """The delivery size: 1080 on the short side, or `resolution` (even sizes, same aspect)."""
+    w, h = FORMATS[fmt]["deliver"]
+    if not resolution or resolution == min(w, h):
+        return w, h
+    k = resolution / min(w, h)
+    return int(round(w * k / 2)) * 2, int(round(h * k / 2)) * 2
 
 
 def deliver_crop(fmt: str, preset: str) -> tuple[int, int, int, int]:

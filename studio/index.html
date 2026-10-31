@@ -333,6 +333,8 @@ html[data-look="neon"] .lvl i{border-radius:2px}
 .strip .fixhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.04em;color:#fff;background:rgba(8,10,13,.55);opacity:0;transition:opacity .12s}
 .strip button:hover .fixhint,.strip button:focus-visible .fixhint{opacity:1}
 #vid.tall{max-height:78vh;width:auto;margin:0 auto;display:block}
+.outrow{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.outrow > span{font-size:14px;font-weight:600}
 .chars{display:flex;flex-wrap:wrap;gap:12px}
 .charcard{position:relative;margin:0;width:132px;border-radius:12px;overflow:hidden;background:var(--panel2);border:1px solid var(--line2)}
 .charcard img{display:block;width:100%;height:150px;object-fit:contain;background:var(--panel3)}
@@ -509,7 +511,7 @@ const CUTS = [["every 2 bars","Slow: every 2 bars"],["every bar","Steady: every 
 const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
-  looks:"auto", framing:"mixed", broll_style:"mix"};
+  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -763,6 +765,8 @@ async function viewBrief(){
       <h2 class="side-h">Output</h2>
       <div class="grid3" role="group" aria-label="Format" id="fmts"></div>
       <div class="stack" role="group" aria-label="Quality" id="tiers" style="margin-top:14px"></div>
+      <div class="orow outrow"><span>Frame rate</span><div class="seg mini" role="group" aria-label="Frame rate" id="fpss"></div></div>
+      <div class="orow outrow"><span>Size</span><div class="seg mini" role="group" aria-label="Size" id="ress"></div></div>
       <p class="tiny" style="margin:8px 0 0" id="etanote"></p>
     </section>
     <section class="card">
@@ -824,7 +828,10 @@ async function viewBrief(){
   // the clips' render size per format (fv/formats.py); both presets are upscaled to the delivery size
   const RSIZE = {quality: {"16:9": "1280×768", "9:16": "768×1280", "1:1": "1024×1024"},
                  fast: {"16:9": "896×512", "9:16": "512×896", "1:1": "768×768"}};
-  const DSIZE = {"16:9": "1920×1080", "9:16": "1080×1920", "1:1": "1080×1080"};
+  // the delivery size: the format's shape with the chosen short side (fv/formats.py deliver_size)
+  const RES = [[720, "720p"], [1080, "1080p"], [1440, "1440p"], [2160, "4K"]];
+  const dsize = f => { const r = +b.resolution || 1080, [w, h] = {"16:9": [16, 9], "9:16": [9, 16], "1:1": [1, 1]}[f];
+    const k = r / Math.min(w, h), ev = x => Math.round(x * k / 2) * 2; return `${ev(w)}×${ev(h)}`; };
   const drawTiers = () => {
     const f = RSIZE.quality[b.format] ? b.format : "16:9";
     const t = [["quality","Quality",RSIZE.quality[f],"50 fps clips: the sharpest detail and the best lip sync."],
@@ -832,7 +839,15 @@ async function viewBrief(){
     $("#tiers").innerHTML = t.map(x => { const e = estimate(Object.assign({}, b, {preset:x[0]})); return `<button type="button" class="tier" data-q="${x[0]}" aria-pressed="${b.preset===x[0]}"><span class="t"><span><b>${x[1]}</b><span class="mono muted" style="font-size:12px;margin-left:8px">${x[2]}</span></span><span class="eta">≈ ${mins(e)}</span></span><small>${x[3]}</small></button>`; }).join("");
     $("#tiers").querySelectorAll(".tier").forEach(el => el.onclick = () => { b.preset = el.dataset.q; saveBrief(); drawTiers(); });
     const sec = +b.seconds > 0 ? b.seconds + " s" : "the whole song";
-    $("#etanote").textContent = `Both are upscaled to ${DSIZE[f]}. Times are a rough guide for ${sec}${S.sys && S.sys.gpu ? " on " + gpuName(S.sys.gpu) : ""}.`;
+    const fps = +b.fps || 25;
+    const motion = fps === 50 && b.preset === "fast" ? " Fast clips are 25 fps, so 50 repeats every frame."
+      : fps === 24 || fps === 30 ? ` ${fps} fps now and then repeats a frame of the 50 fps clips; 25 and 50 are the smoothest.` : "";
+    const big = (+b.resolution || 1080) > 1080 ? " Above 1080p the clips are scaled up: bigger files, not more detail." : "";
+    $("#etanote").textContent = `${dsize(f)} at ${fps} fps.${motion}${big} Times are a rough guide for ${sec}${S.sys && S.sys.gpu ? " on " + gpuName(S.sys.gpu) : ""}.`;
+    $("#fpss").innerHTML = [24, 25, 30, 50].map(x => `<button type="button" class="opt" data-v="${x}" aria-pressed="${fps === x}">${x}</button>`).join("");
+    $("#ress").innerHTML = RES.map(([x, n]) => `<button type="button" class="opt" data-v="${x}" aria-pressed="${(+b.resolution || 1080) === x}">${n}</button>`).join("");
+    $("#fpss").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.fps = +el.dataset.v; saveBrief(); drawTiers(); });
+    $("#ress").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.resolution = +el.dataset.v; saveBrief(); drawTiers(); });
   };
   drawFmt(); drawTiers();
 

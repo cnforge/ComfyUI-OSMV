@@ -375,6 +375,13 @@ def _pick(v, ok: tuple):
     return v if v in ok else ok[0]
 
 
+def _output(b: dict) -> tuple[int, int]:
+    """The brief's frame rate and short side, checked (25 fps and 1080 when unset or unknown)."""
+    from .formats import FRAME_RATES, RESOLUTIONS
+    fps, res = int(b.get("fps") or 25), int(b.get("resolution") or 1080)
+    return (fps if fps in FRAME_RATES else 25), (res if res in RESOLUTIONS else 1080)
+
+
 def _characters(b: dict) -> list:
     """The brief's character photos (characters: a list; character: one, from older briefs)."""
     c = b.get("characters")
@@ -396,6 +403,9 @@ def _director_graph(b: dict) -> dict:
          "crowd": b.get("crowd", "auto"), **cuts}
     if b.get("models") in ("auto", "24gb", "full") and _director_has("models"):
         d["models"] = b["models"]
+    fps, res = _output(b)
+    if _director_has("fps"):  # an older node gets these from the plan when it is done (_job)
+        d["fps"], d["resolution"] = str(fps), str(res)
     if _characters(b):  # every singer becomes one of these people (the Director's one-artist mode)
         d["artist_image_path"] = "|".join(_input_path(x, "photo") for x in _characters(b))
     return {"1": {"class_type": "LoadAudio", "inputs": {"audio": b["song"]}},
@@ -436,6 +446,15 @@ def _job(pid: str) -> dict:
         for it in node_out.get("text", []) or []:
             if isinstance(it, dict) and it.get("filename") == "jobs.json":
                 run = it.get("subfolder", "").rstrip("/").split("/")[-1]
+    if run and rec.get("output"):  # a Director node from before fps and resolution: set them in the plan
+        try:
+            pj = os.path.join(_run_dir(run), "plan.json")
+            p = _load(pj, {}) or {}
+            if p and "resolution" not in p:
+                p["out_fps"], p["resolution"] = float(rec["output"][0]), int(rec["output"][1])
+                json.dump(p, open(pj, "w", encoding="utf-8"), indent=1)
+        except Exception:
+            pass
     if run and (rec.get("project") or rec.get("director")):
         try:
             sj = os.path.join(_run_dir(run), "studio.json")
@@ -1316,7 +1335,7 @@ async def _api(request: web.Request, route: str) -> web.Response:
             import time
             with open(os.path.join(_jobs_dir(), re.sub(r"[^0-9a-f-]", "", pid) + ".json"), "w", encoding="utf-8") as f:
                 json.dump({"t": time.time(), "estimate": est, "render": bool(body.get("render")), "project": project,
-                           "director": graph}, f)
+                           "director": graph, "output": None if _director_has("fps") else _output(body)}, f)
             return web.json_response({"prompt_id": pid, "estimate": est})
         if route == "recut":
             d = _run_dir(body.get("run", ""))

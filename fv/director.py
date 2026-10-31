@@ -148,7 +148,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
            artist_path: str = "", qc_retries: int = 2, theme: str = "", broll_share: float = 0.125,
            broll_style: str = "mix", staged: bool = True,
            look_groups: bool = False, cuts: dict | None = None, audio_fx: str = "",
-           cast_order: str = "as written", crowd: str = "auto", log=print,
+           cast_order: str = "as written", crowd: str = "auto", log=print, fps: float = 0.0, resolution: int = 1080,
            lip_repair: bool = False, models: str = "auto") -> dict:  # lip_repair: accepted and ignored, so older callers
     # (an old nodes.py still loaded in a ComfyUI that has not restarted) still work
     """staged (voice runs queued here, with QC): the 4-load order. Krea makes every portrait and
@@ -222,7 +222,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                                               formats.portrait_size(fmt)[1]) for i, x in enumerate(artist_paths)]
         artist_path = artist_paths[0] if artist_paths else ""
         p = planner.plan_voice(tl, pk, fmt=fmt, preset=preset, seconds=seconds, start=start, seed=seed,
-                               twins=None if twins == "auto" else twins, framing=framing)
+                               twins=None if twins == "auto" else twins, framing=framing, out_fps=fps or None)
         p["artist_path"] = artist_path
         if artist_paths:  # the leads take the photos in turn; a look is its lead's person
             p["artist_paths"] = artist_paths
@@ -251,8 +251,10 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
             raise ValueError("motion mode needs a dance clip (dance_video_path)")
         n, cfps = clip_info(dance_path)
         p = planner.plan_motion(tl, pk, clip_frames=n, clip_fps=cfps, fmt=fmt, preset=preset,
-                                seconds=seconds, start=start, seed=seed)
+                                seconds=seconds, start=start, seed=seed, **({"out_fps": fps} if fps else {}))
         p["dance_path"] = dance_path
+    if resolution and resolution in formats.RESOLUTIONS:
+        p["resolution"] = int(resolution)
     log(f"[OneShotMV] {mode} plan: {len(p['renders'])} renders, window {p['song_t0']:.2f}-{p['song_t1']:.2f}s, "
         f"tempo {p['tempo']}")
 
