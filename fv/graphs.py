@@ -67,7 +67,7 @@ def _resolve_models(m: dict, idx=None) -> tuple[dict, list]:
 MODEL_SETS = ("24gb", "full")
 FULL_MIN_GB = 46          # the full set wants a 48 GB card or bigger
 RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", "ltx23_ckpt", "ltx23_te",
-            "ltx23_upscaler", "ltx23_loras")  # what a default voice run loads
+            "ltx23_upscaler", "ltx23_loras", "ltx_union_lora")  # what a default voice run loads (looks too)
 ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
                "klein_unet", "klein_te", "klein_vae")      # and its looks
 
@@ -123,7 +123,7 @@ def pick_models(requested: str | None = "auto") -> str:
     return "24gb"
 
 
-RUN_NODES = {"ClownsharKSampler_Beta": "RES4LYF"}  # other packs' nodes a default run needs
+RUN_NODES = {"ClownsharKSampler_Beta": "RES4LYF", "DWPreprocessor": "comfyui_controlnet_aux"}  # other packs' nodes a default run needs
 
 
 def missing_nodes() -> list:
