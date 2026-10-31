@@ -46,7 +46,10 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
 ![The Studio: the Brief, the Plan, Rendering and the Result](media/studio_screens.jpg)
 
 1. **The Brief.** Name the project, then drop in a song. The waveform shows the low, medium and
-   high energy sections and the stretch the video will use; click it to start somewhere else.
+   high energy sections and the stretch the video will use: drag the box to move it, click or
+   drag anywhere to listen from there. Optionally add a **Character** photo: every singer
+   becomes that person, dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
+   see [the other models](#models-and-licences); use a photo of someone who agreed to it).
    Pick a length, a World (four examples, or write your own) and a format. The buttons say how
    long the plan and the video will take.
 2. **The Plan.** The World the tool wrote and every shot (when, what energy, who, wearing what,

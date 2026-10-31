@@ -156,11 +156,11 @@ def _songs() -> list[dict]:
     return found[:300]
 
 
-def _song_path(name: str) -> str:
+def _input_path(name: str, what: str = "song") -> str:
     root = folder_paths.get_input_directory()
     p = os.path.normpath(os.path.join(root, name))
     if not p.startswith(os.path.normpath(root)) or not os.path.isfile(p):
-        raise web.HTTPNotFound(text=json.dumps({"error": f"no song '{name}' in the input folder"}),
+        raise web.HTTPNotFound(text=json.dumps({"error": f"no {what} '{name}' in the input folder"}),
                                content_type="application/json")
     return p
 
@@ -206,7 +206,7 @@ def _analysis(path: str) -> dict:
 
 def _analyze(name: str, seconds: float, start: float) -> dict:
     from . import plan as planner
-    path = _song_path(name)
+    path = _input_path(name)
     a = _analysis(path)
     tl = a["tl"]
     t0, t1 = planner.choose(tl, float(seconds), float(start))
@@ -243,7 +243,7 @@ def _estimate(b: dict) -> dict:
     World is already written for this line and seed."""
     import math
     from . import broll, casting, plan as planner
-    path = _song_path(b["song"])
+    path = _input_path(b["song"])
     tl = _analysis(path)["tl"]
     pk = casting.load_pack("crowd")
     cuts = {k[5:]: b[k] for k in ("cuts_low", "cuts_medium", "cuts_high") if b.get(k)}
@@ -383,6 +383,8 @@ def _director_graph(b: dict) -> dict:
          "crowd": b.get("crowd", "auto"), **cuts}
     if b.get("models") in ("auto", "24gb", "full") and _director_has("models"):
         d["models"] = b["models"]
+    if b.get("character"):  # every portrait becomes this person (the Director's one-artist mode)
+        d["artist_image_path"] = _input_path(b["character"], "photo")
     return {"1": {"class_type": "LoadAudio", "inputs": {"audio": b["song"]}},
             "2": {"class_type": "FVDirector", "inputs": d}}
 
@@ -1236,9 +1238,12 @@ async def _api(request: web.Request, route: str) -> web.Response:
         if route == "start":
             if not body.get("song"):
                 return web.json_response({"error": "pick a song first"}, status=400)
-            _song_path(body["song"])
+            _input_path(body["song"])
+            if body.get("character"):
+                _input_path(body["character"], "photo")
             if body.get("render"):  # refuse now, not after minutes of planning
-                why = await _blocking(lambda: _fv("graphs").not_ready(body.get("models") or "auto"))
+                why = await _blocking(lambda: _fv("graphs").not_ready(body.get("models") or "auto",
+                                                                      artist=bool(body.get("character"))))
                 if why:
                     return web.json_response({"error": f"Can't render on this ComfyUI yet: {why}."}, status=400)
             try:

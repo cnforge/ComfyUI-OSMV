@@ -68,6 +68,8 @@ MODEL_SETS = ("24gb", "full")
 FULL_MIN_GB = 46          # the full set wants a 48 GB card or bigger
 RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", "ltx23_ckpt", "ltx23_te",
             "ltx23_upscaler", "ltx23_loras")  # what a default voice run loads
+ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
+               "klein_unet", "klein_te", "klein_vae")      # and its looks
 
 
 def _set_files(name: str) -> dict:
@@ -99,9 +101,9 @@ def vram_gb() -> float:
     return 0.0
 
 
-def missing_files(name: str, idx=None) -> list:
-    """The files of a model set that a default run needs and this ComfyUI doesn't have."""
-    m = {k: v for k, v in _set_files(name).items() if k in RUN_KEYS}
+def missing_files(name: str, idx=None, keys=RUN_KEYS) -> list:
+    """The files of a model set that a default run (or the given keys) needs and this ComfyUI doesn't have."""
+    m = {k: v for k, v in _set_files(name).items() if k in keys}
     if m.get("krea_raw") == m.get("krea_turbo"):
         m.pop("krea_turbo_lora", None)  # one Krea file for both passes: the Turbo LoRA isn't used
     return sorted(set(f for _, f in _resolve_models(m, idx)[1]))
@@ -133,14 +135,16 @@ def missing_nodes() -> list:
     return sorted({p for n, p in RUN_NODES.items() if n not in comfy_nodes.NODE_CLASS_MAPPINGS})
 
 
-def not_ready(requested: str | None = "auto") -> str:
-    """Why a render with this model set can't run here ('' when it can)."""
+def not_ready(requested: str | None = "auto", artist: bool = False) -> str:
+    """Why a render with this model set (and a character photo) can't run here ('' when it can)."""
     name = pick_models(requested)
     files, packs = missing_files(name), missing_nodes()
+    if artist:
+        files += missing_files(name, keys=ARTIST_KEYS)
     why = []
     if files:
-        why.append(f"the {'full' if name == 'full' else '24 GB'} model set is missing {len(files)} "
-                   f"file{'s' if len(files) > 1 else ''} ({', '.join(files[:3])}"
+        why.append(f"{'a character run' if artist else 'the ' + ('full' if name == 'full' else '24 GB') + ' model set'}"
+                   f" is missing {len(files)} file{'s' if len(files) > 1 else ''} ({', '.join(files[:3])}"
                    f"{f' and {len(files) - 3} more' if len(files) > 3 else ''}; the README lists the downloads)")
     if packs:
         why.append(f"{', '.join(packs)} didn't load (look for 'IMPORT FAILED' in the ComfyUI console)")
@@ -153,7 +157,8 @@ def models_report() -> dict:
     idx = _model_index()
     return {"vram_gb": round(vram_gb(), 1), "reserved_gb": round(reserved_gb(), 1),
             "auto": pick_models("auto"), "full_min_gb": FULL_MIN_GB,
-            "missing": {n: missing_files(n, idx) for n in MODEL_SETS}, "missing_packs": missing_nodes()}
+            "missing": {n: missing_files(n, idx) for n in MODEL_SETS}, "missing_packs": missing_nodes(),
+            "missing_character": missing_files("24gb", idx, ARTIST_KEYS)}  # the same files in both sets
 
 
 def use_models(name: str | None = "auto") -> str:

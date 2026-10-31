@@ -207,19 +207,21 @@ html[data-look="neon"]{
   --bg:#0d1015;--chrome:#0a0d11;--panel:#12161c;--panel2:#181d24;--panel3:#212731;--line:#222832;--line2:#323a46;--line3:#3c4552;
   --text:#eef0f4;--muted:#a3acb8;--dim:#7a8491;
   --g1:#d7ff3d;--g2:#19e6b0;--g3:#3a86ff;--g4:#b44dff;
-  --grad:linear-gradient(90deg in oklch,var(--g1),var(--g2) 36%,var(--g3) 68%,var(--g4));
-  --grad-v:linear-gradient(180deg in oklch,var(--g1),var(--g2) 36%,var(--g3) 68%,var(--g4));
-  --grad-d:linear-gradient(135deg in oklch,var(--g1),var(--g2) 36%,var(--g3) 68%,var(--g4));
-  --grad-soft:linear-gradient(90deg in oklch,color-mix(in srgb,var(--g2) 13%,transparent),color-mix(in srgb,var(--g3) 15%,transparent),color-mix(in srgb,var(--g4) 18%,transparent));
+  /* buttons, outlines and highlights: one teal (--title), not a rainbow */
+  --grad:linear-gradient(var(--title),var(--title));
+  --grad-v:var(--grad);
+  --grad-d:var(--grad);
+  --grad-soft:linear-gradient(color-mix(in srgb,var(--title) 14%,transparent),color-mix(in srgb,var(--title) 14%,transparent));
   --ink:#0b0d10;
+  --title:#2dd4bf;  /* one teal for titles and labels, not the gradient */
   --accent:#d7ff3d;--accent-bg:#181d24;--accent-bg2:#181d24;--accent-text:#eef0f4;
   --warn:#eaa63e;--bad:#f04a43;--ok:#3dc580;--ready:#4f8eff;--idle:#8d96a4;
-  /* energy levels are groups, so they take slices of the gradient */
-  --low:color-mix(in oklch,var(--g3),var(--g4) 60%);--mid:var(--g2);--high:var(--g1);
+  /* energy levels: three shades of the teal, dim to bright */
+  --low:color-mix(in oklch,var(--title) 45%,var(--panel3));--mid:var(--title);--high:color-mix(in oklch,var(--title),#fff 45%);
   --sans:Bahnschrift,'DIN Alternate','Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:'Cascadia Mono','Cascadia Code',Consolas,ui-monospace,monospace;
 }
-html[data-look="neon"] ::selection{background:color-mix(in srgb,var(--g3) 45%,transparent)}
+html[data-look="neon"] ::selection{background:color-mix(in srgb,var(--title) 45%,transparent)}
 html[data-look="neon"] body{font-size:14px;letter-spacing:.005em;background-color:var(--bg);
   background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1.3px);background-size:24px 24px}
 html[data-look="neon"] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:80;opacity:.06;mix-blend-mode:overlay;
@@ -238,13 +240,13 @@ html[data-look="neon"] .field select,html[data-look="neon"] .field input{text-tr
 html[data-look="neon"] h1{font-size:46px;line-height:.9;font-weight:700;letter-spacing:.02em}
 html[data-look="neon"] h1::after{content:"";display:block;width:88px;height:3px;border-radius:2px;background:var(--grad);margin-top:14px}
 html[data-look="neon"] .sub{font-size:14px;margin-top:12px}
-html[data-look="neon"] .label{font-size:12px;letter-spacing:.12em;font-weight:700;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;width:fit-content}
+html[data-look="neon"] .label{font-size:12px;letter-spacing:.12em;font-weight:700;color:var(--title);width:fit-content}
 html[data-look="neon"] .kv{letter-spacing:.1em}
 html[data-look="neon"] .toplink{font-size:14px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
 html[data-look="neon"] .toplink:hover{color:var(--text)}
 /* chrome */
 html[data-look="neon"] header.top{background:color-mix(in srgb,var(--chrome) 94%,transparent);border-bottom-color:var(--line)}
-html[data-look="neon"] .logo b{font-size:30px;line-height:28px;letter-spacing:.05em;font-weight:700;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+html[data-look="neon"] .logo b{font-size:30px;line-height:28px;letter-spacing:.05em;font-weight:700;color:var(--title)}
 html[data-look="neon"] .step{position:relative;border-radius:0;padding:8px 10px;font-size:16px;letter-spacing:.06em;font-weight:700;background:none}
 html[data-look="neon"] .step .n{width:24px;height:24px;border-radius:6px;font-family:var(--mono);font-size:12px;border-color:var(--line2)}
 html[data-look="neon"] .step.done .n{background:var(--panel3);border-color:var(--panel3)}
@@ -259,7 +261,7 @@ html[data-look="neon"] .card.cta{position:relative;overflow:hidden}
 html[data-look="neon"] .card.cta::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--grad)}
 html[data-look="neon"] .bar{border-radius:12px;background:color-mix(in srgb,var(--panel) 92%,transparent);border-color:var(--line);box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.045)}
 html[data-look="neon"] .overlay .box{border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.045)}
-html[data-look="neon"] .spin{border-top-color:var(--g3);animation-duration:1.6s}
+html[data-look="neon"] .spin{border-top-color:var(--title);animation-duration:1.6s}
 /* buttons and controls */
 html[data-look="neon"] .btn{border-radius:8px;background:var(--panel2);border-color:var(--line2);font-size:14px;letter-spacing:.06em;font-weight:700;min-height:40px;transition:background .12s,border-color .12s}
 html[data-look="neon"] .btn:hover{background:var(--panel3);border-color:var(--line3)}
@@ -389,19 +391,19 @@ html[data-look="neon"] .looksw{font-family:var(--mono)}
 .applybar .btn{font-size:17px;min-height:54px;font-weight:800}
 .applybar{padding:2px 0 0}
 .applybar .btn:disabled{opacity:1;color:var(--muted);background:var(--panel2);border-color:var(--line2)}
-html[data-look="neon"] .slider input{accent-color:var(--g3)}
+html[data-look="neon"] .slider input{accent-color:var(--title)}
 html[data-look="neon"] .grade{border:1px solid var(--line2);position:relative;isolation:isolate;overflow:visible}
 html[data-look="neon"] .grade .gimg{border-radius:9px 9px 0 0;overflow:hidden}
 html[data-look="neon"] .grade[aria-pressed=true]::before{content:"";position:absolute;inset:-5px;border-radius:15px;padding:2.5px;background:var(--grad);pointer-events:none;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
 html[data-look="neon"] .refine .ed h3{font-stretch:condensed;font-variation-settings:'wdth' 75;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--text)}
 html[data-look="neon"] .refine-h{font-stretch:condensed;font-variation-settings:'wdth' 75;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
-html[data-look="neon"] .refine-h span,html[data-look="neon"] .refine .acc.open h3{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+html[data-look="neon"] .refine-h span,html[data-look="neon"] .refine .acc.open h3{color:var(--title)}
 html[data-look="neon"] .refine .acc.open{border-color:transparent}
 html[data-look="neon"] .refine .acc.open::before{content:"";position:absolute;inset:-1px;border-radius:18px;padding:1.5px;background:var(--grad);pointer-events:none;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
 html[data-look="neon"] .applybar .btn{font-size:18px;letter-spacing:.05em}
-html[data-look="neon"] .fixpanel{background:var(--panel2);border-color:var(--line2);box-shadow:inset 3px 0 0 var(--g3)}
+html[data-look="neon"] .fixpanel{background:var(--panel2);border-color:var(--line2);box-shadow:inset 3px 0 0 var(--title)}
 html[data-look="neon"] .strip .fixhint{font-stretch:condensed;font-variation-settings:'wdth' 75;text-transform:uppercase}
 /* demo mode (?demo): a strip above the header with jumps to every screen */
 .demobar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 32px;background:#1a1408;border-bottom:1px solid #4a3a14;font-size:13px;color:var(--text)}
@@ -439,7 +441,7 @@ html[data-look="neon"] .strip .fixhint{font-stretch:condensed;font-variation-set
 .seg.mini .opt{min-height:30px;padding:0 10px;font-size:12px}
 option{background:var(--panel2);color:var(--text)}
 html[data-look="neon"] .side-h{font-stretch:condensed;font-variation-settings:'wdth' 75;text-transform:uppercase;letter-spacing:.02em;font-weight:700;
-  background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;width:fit-content}
+  color:var(--title);width:fit-content}
 html[data-look="neon"] .orow{color:color-mix(in srgb,var(--text) 80%,var(--muted))}
 html[data-look="neon"] .orow select,html[data-look="neon"] .orow input{background-color:var(--panel2)}
 html[data-look="neon"] .orow select,html[data-look="neon"] .orow input{text-transform:none;font-stretch:normal;font-variation-settings:normal}
@@ -521,7 +523,7 @@ const WORLDS = [
 ];
 const CUTS = ["every 2 bars","every bar","to the music (subtle)","to the music (intense)"];
 const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
-const DEFAULT_BRIEF = {name:"", song:"", theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
+const DEFAULT_BRIEF = {name:"", song:"", character:"", theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto"};
 
 // ---------------------------------------------------------------- state
@@ -769,6 +771,13 @@ async function viewBrief(){
       <audio id="audio" preload="none"></audio>
     </section>
 
+    <section class="card" aria-labelledby="charh">
+      <div class="row"><h2 class="label" id="charh">Character</h2><span class="muted" style="font-size:13px">optional</span>
+        <span style="margin-left:auto" class="row"><button class="btn sm hide" id="charnew" type="button">New photo</button><button class="btn sm hide" id="charoff" type="button">Remove</button></span></div>
+      <div id="charpick" style="margin-top:14px"></div>
+      <p class="note" id="charnote"></p>
+    </section>
+
     <section class="card" aria-labelledby="worldh">
       <h2 class="label" id="worldh" style="margin-bottom:16px">World</h2>
       <div class="tiles" role="group" aria-label="World examples" id="tiles"></div>
@@ -810,7 +819,7 @@ async function viewBrief(){
       <p class="center muted" style="margin:0;font-size:13px" id="eta-why">See the World the tool writes and every shot before the long render.</p>
       <button class="btn two" id="go-render" type="button"><span class="lbl">Skip the preview, make the video</span><span class="eta-b" id="eta-all"></span></button>
     </section>
-    <p class="tiny" style="margin:0 4px">Use music you have the rights to. Every face is invented.</p>
+    <p class="tiny" id="finep" style="margin:0 4px">Use music you have the rights to. Every face is invented.</p>
    </aside>
   </div>`;
 
@@ -871,7 +880,7 @@ async function viewBrief(){
     $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!(miss.length || packs.length));
   };
   drawModels();
-  if (S.models) drawModels(); else api("models").then(r => { S.models = r; if ($("#mset")) drawModels(); }).catch(() => { S.models = null; });
+  if (S.models) drawModels(); else api("models").then(r => { S.models = r; if ($("#mset")){ drawModels(); drawChar(); } }).catch(() => { S.models = null; });
 
   // advanced
   for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","cast_order"]) { const el = $("#"+k); el.value = b[k]; el.onchange = () => { b[k] = el.value; saveBrief(); }; }
@@ -893,7 +902,7 @@ async function viewBrief(){
   $("#replace").onclick = () => { b.song = ""; S.analysis = null; saveBrief(); drawSong(); };
   $("#go-preview").onclick = () => start(false);
   $("#go-render").onclick = () => start(true);
-  drawSong();
+  drawSong(); drawChar();
   if (!S.sys) loadSystem().then(drawTiers);
 }
 
@@ -1054,16 +1063,56 @@ function refreshEstimate(){
   }, 500);
 }
 
-async function upload(file){
-  overlay("Uploading the song", file.name);
+// a file into ComfyUI's input folder; its name there
+async function toInput(file, what){
+  overlay("Uploading the " + what, file.name);
   try{
     const fd = new FormData(); fd.append("image", file, file.name); fd.append("type", "input"); fd.append("overwrite", "false");
     const r = await fetch("/api/upload/image", {method:"POST", body:fd});
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
-    S.brief.song = (j.subfolder ? j.subfolder + "/" : "") + j.name; S.brief.start = -1; saveBrief();
-    overlay(); drawSong();
-  }catch(e){ overlay(); toast("Upload failed: " + e.message); }
+    overlay(); return (j.subfolder ? j.subfolder + "/" : "") + j.name;
+  }catch(e){ overlay(); toast("Upload failed: " + e.message); return ""; }
+}
+async function upload(file){
+  const name = await toInput(file, "song");
+  if (name){ S.brief.song = name; S.brief.start = -1; saveBrief(); drawSong(); }
+}
+
+// the character photo: every portrait in the video becomes this person, in the World's outfits,
+// places and light (the Director's one-artist mode)
+function drawChar(){
+  const b = S.brief, pick = $("#charpick");
+  if (!pick) return;
+  $("#charnew").classList.toggle("hide", !b.character); $("#charoff").classList.toggle("hide", !b.character);
+  const miss = (S.models && S.models.missing_character) || [];
+  const note = $("#charnote");
+  note.textContent = miss.length ? `A character run needs ${miss.length === 1 ? "one more file" : miss.length + " more files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`
+    : b.character ? "Every singer in the video is this person, dressed and placed by the World line. Use a photo of someone who agreed to this."
+    : "Add a photo of one person and every singer in the video becomes them. Without one, every face is invented.";
+  note.classList.toggle("warn", !!miss.length);
+  const choose = async f => { if (!f) return; const name = await toInput(f, "photo"); if (name){ b.character = name; saveBrief(); drawChar(); } };
+  if (b.character){
+    const parts = b.character.split("/"), q = new URLSearchParams({filename: parts.pop(), subfolder: parts.join("/"), type: "input"});
+    pick.innerHTML = `<div class="row" style="gap:14px"><img src="/api/view?${q}" alt="The character photo" style="width:96px;height:96px;object-fit:cover;border-radius:12px"><span style="font-weight:700;word-break:break-all">${esc(b.character.split("/").pop())}</span></div>`;
+  } else {
+    pick.innerHTML = `<div class="drop" id="chardrop" tabindex="0" role="button" aria-label="Upload a character photo">
+        <div style="font-weight:700;font-size:16px">Drop a photo of the person here, or click to upload</div>
+        <div class="muted" style="font-size:13px">One person, face clearly visible. JPG, PNG or WebP.</div>
+      </div>`;
+    const dz = $("#chardrop");
+    dz.onclick = () => $("#charfile").click();
+    dz.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); $("#charfile").click(); } };
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add("over"); };
+    dz.ondragleave = () => dz.classList.remove("over");
+    dz.ondrop = e => { e.preventDefault(); dz.classList.remove("over"); choose(e.dataTransfer.files[0]); };
+  }
+  let fi = $("#charfile");
+  if (!fi){ fi = document.createElement("input"); Object.assign(fi, {type: "file", id: "charfile", accept: "image/*", className: "hide"}); document.body.append(fi); }
+  fi.onchange = () => { choose(fi.files[0]); fi.value = ""; };
+  $("#charnew").onclick = () => fi.click();
+  $("#charoff").onclick = () => { b.character = ""; saveBrief(); drawChar(); };
+  const fine = $("#finep"); if (fine) fine.textContent = b.character ? "Use music and a photo you have the rights to." : "Use music you have the rights to. Every face is invented.";
 }
 
 async function start(render, briefOverride){
@@ -1455,9 +1504,9 @@ async function viewVideos(){
 }
 
 // ---------------------------------------------------------------- app icon
-// The logo: a crosshair with a sound wave in its sights, on a tile in the palette's gradient.
+// The logo: a crosshair with a sound wave in its sights, on a tile in the look's colours.
 const LOGO = id => `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="${id}" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">` +
-  `<stop offset="0" style="stop-color:var(--g1)"/><stop offset=".36" style="stop-color:var(--g2)"/><stop offset=".68" style="stop-color:var(--g3)"/><stop offset="1" style="stop-color:var(--g4)"/></linearGradient></defs>` +
+  `<stop offset="0" style="stop-color:var(--title,var(--g1))"/><stop offset=".36" style="stop-color:var(--title,var(--g2))"/><stop offset=".68" style="stop-color:var(--title,var(--g3))"/><stop offset="1" style="stop-color:var(--title,var(--g4))"/></linearGradient></defs>` +
   `<rect width="32" height="32" rx="7" fill="url(#${id})"/><circle cx="16" cy="16" r="9.6" fill="none" stroke="#0b0d10" stroke-width="2.2"/>` +
   `<path d="M16 3.5v4.4M16 24.1v4.4M3.5 16h4.4M24.1 16h4.4" stroke="#0b0d10" stroke-width="2.2" stroke-linecap="round"/>` +
   [[11.6, 4.5], [14.2, 9], [16.8, 12], [19.4, 6.5]].map(([x, h]) => `<rect x="${x - 1}" y="${16 - h / 2}" width="2" height="${h}" rx="1" fill="#0b0d10"/>`).join("") + `</svg>`;
@@ -1469,7 +1518,7 @@ function drawIcon(){
 }
 
 // the palettes, with the surface and gradient colours the menu previews
-const PALS = [["neon","Neon","#0d1015",["#d7ff3d","#19e6b0","#3a86ff","#b44dff"]],["sunset","Sunset","#130e13",["#ffd166","#ff8a5b","#ff4f8b","#b14dff"]],
+const PALS = [["neon","Neon","#0d1015",["#2dd4bf","#2dd4bf"]],["sunset","Sunset","#130e13",["#ffd166","#ff8a5b","#ff4f8b","#b14dff"]],
               ["aurora","Aurora","#0a1218",["#a8ffe0","#4fd8ff","#6a86ff","#c38bff"]],["ember","Ember","#120f0c",["#ffe27a","#ffb347","#ff7a45","#ff4d6d"]]];
 function drawLook(){
   const cur = document.documentElement.getAttribute("data-pal") || "neon", p = PALS.find(x => x[0] === cur) || PALS[0];
