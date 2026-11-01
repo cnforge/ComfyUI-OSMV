@@ -10,6 +10,9 @@ async function openRunGraph() {
   if (!run) return;
   const job = q.get("job") || "";
   history.replaceState(null, "", location.pathname + location.hash);  // a reload doesn't open it again
+  // setup runs before ComfyUI restores its saved workflow tabs, which would replace the graph:
+  // wait for the startup spinner to go (30 s at most)
+  for (let i = 0; i < 300 && app.extensionManager?.spinner; i++) await new Promise((r) => setTimeout(r, 100));
   try {
     const r = await fetch(`/oneshot-mv/api/graph/${encodeURIComponent(run)}?job=${encodeURIComponent(job)}`);
     const j = await r.json();
@@ -25,5 +28,5 @@ app.registerExtension({
   commands: [{ id: "OneShotMV.OpenStudio", label: "Open OneShot MV Studio", icon: "pi pi-video", function: open }],
   menuCommands: [{ path: ["OneShot MV"], commands: ["OneShotMV.OpenStudio"] }],
   actionBarButtons: [{ icon: "icon-[lucide--clapperboard]", label: "OneShot MV", tooltip: "Open OneShot MV Studio", onClick: open }],
-  setup: openRunGraph,
+  setup() { openRunGraph(); },  // not awaited: startup carries on while it waits
 });
