@@ -305,6 +305,23 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                 log(f"[OneShotMV] crowd dress skipped ({e})")
         p["cast_order"], p["crowd"] = (cast_order or "as written"), pk["casting"]["crowd_mode"]
         cast = casting.cast_voice(pk, p["performers"], seed, sizes, fmt=fmt, leads=leads, phases=phases)
+        # how much is sung under each lead (before the portraits: an instrumental lead's still has
+        # its mouth closed). Dense vocals (rap) get the articulation prompt (it lifted lip sync on
+        # dense shots), (almost) none the not-singing one.
+        from . import lipsync
+        seek = lambda r: round(r["t_start"] + p["song_t0"] - p["stems_t0"], 4)
+        vx, vsr = stems.read_wav(vocal_path) if os.path.exists(vocal_path) else (None, None)
+        if vx is not None:
+            vx = vx.mean(0) if vx.ndim == 2 else vx
+            vref = float(np.sqrt(np.mean(vx ** 2) + 1e-12))
+        dense_from, quiet_below = _density_bounds(pk)
+        for r in [r for r in p["renders"] if r["role"] == "A"]:
+            if vx is not None:
+                r["vocal_density"] = round(lipsync.vocal_density(vx, vsr, seek(r), r["frames"] / r["fps"], vref), 3)
+                if r["vocal_density"] < quiet_below:
+                    r["instrumental"] = True
+                    c = cast[r["performer"]]
+                    c["portrait"] = casting.instrumental_portrait(c["portrait"])
         s1, s2 = formats.portrait_size(fmt)
         char_of = {r["performer"]: r.get("character", 0) for r in p["renders"] if r["role"] in ("A", "B")}
         photo_of = lambda performer: (p.get("artist_paths") or [artist_path])[char_of.get(performer, 0)]
@@ -328,21 +345,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         by_id = {r["id"]: r for r in p["renders"]}
         for r in p["renders"]:
             r["path"] = os.path.join(run_dir, f"r{r['id']:03d}{r['role']}_00001_.mp4")
-        seek = lambda r: round(r["t_start"] + p["song_t0"] - p["stems_t0"], 4)
-        # dense vocals (rap) get the articulation prompt: it lifted lip sync on dense shots
-        from . import lipsync
-        vx, vsr = stems.read_wav(vocal_path) if os.path.exists(vocal_path) else (None, None)
-        if vx is not None:
-            vx = vx.mean(0) if vx.ndim == 2 else vx
-            vref = float(np.sqrt(np.mean(vx ** 2) + 1e-12))
-        dense_from, quiet_below = _density_bounds(pk)
-        sing_for = {}
-        for r in [r for r in p["renders"] if r["role"] == "A"]:
-            if vx is not None:
-                r["vocal_density"] = round(lipsync.vocal_density(vx, vsr, seek(r), r["frames"] / r["fps"], vref), 3)
-                if r["vocal_density"] < quiet_below:
-                    r["instrumental"] = True
-            sing_for[r["id"]] = _sing(cast[r["performer"]]["sing"], r, dense_from)
+        sing_for = {r["id"]: _sing(cast[r["performer"]]["sing"], r, dense_from) for r in p["renders"] if r["role"] == "A"}
         for r in p["renders"]:  # a look sings (or not) with its lead
             if r["role"] == "B" and by_id[r["twin_of"]].get("instrumental"):
                 r["instrumental"] = True

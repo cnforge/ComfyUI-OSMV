@@ -101,6 +101,15 @@ def instrumental(text: str) -> str:
     return text
 
 
+_QUIET_PORTRAIT = re.compile(r"singing (?:passionately )?(?:straight into the lens|toward the camera)? ?with the mouth open mid-word")
+
+
+def instrumental_portrait(text: str) -> str:
+    """A portrait prompt for such a shot: its clip starts from this still, so a mouth painted open
+    mid-word opens the clip (and LTX tends to sing it back open by the end)."""
+    return _QUIET_PORTRAIT.sub("lost in the music with the mouth closed, not singing", text)
+
+
 def instrumental_negative(neg: str) -> str:
     """The negative prompt for such a shot: no singing, and a closed mouth is no longer a fault."""
     parts = [x.strip() for x in neg.split(",") if x.strip() and x.strip() != "closed mouth"]
