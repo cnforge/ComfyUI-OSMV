@@ -700,7 +700,7 @@ const gpuName = g => String(g || "").replace(/^NVIDIA\s+/i, "").replace(/\s+(Bla
 const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; const m = Math.round(s / 60); return mins(m); };
 // minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
 function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
-  const per = b.engine === "h3" ? (b.preset === "quality" ? 3 : 2) : (b.preset === "quality" ? 2 : 1); return 6 + per * sec; }
+  const per = b.engine === "h3" ? (b.preset === "quality" ? 5 : 2) : (b.preset === "quality" ? 2.5 : 1); return 6 + per * sec; }
 function saveBrief(){ store.set("brief", S.brief); }
 // the project name: saved with the run (studio.json); in demo mode the brief's name stands in
 const projectOf = r => (r && r.project) || (DEMO && r ? ((store.get("briefs", {})[r.run] || {}).name || "") : "");
@@ -854,10 +854,10 @@ async function viewBrief(){
     $("#fmts").innerHTML = [["16:9",40,23],["9:16",20,34],["1:1",28,28]].map(f => `<button type="button" class="fmt" data-f="${f[0]}" aria-pressed="${b.format===f[0]}"><i aria-hidden="true" style="width:${f[1]}px;height:${f[2]}px"></i>${f[0]}</button>`).join("");
     $("#fmts").querySelectorAll(".fmt").forEach(el => el.onclick = () => { b.format = el.dataset.f; saveBrief(); drawFmt(); drawTiers(); });
   };
-  // the clips' render size per format (fv/formats.py); both presets are upscaled to the delivery size
-  const RSIZE = {ltx25: {quality: {"16:9": "1280×768", "9:16": "768×1280", "1:1": "1024×1024"},
+  // the clips' render size per format (fv/formats.py); scaled to the delivery size in the cut
+  const RSIZE = {ltx25: {quality: {"16:9": "1920×1152", "9:16": "1152×1920", "1:1": "1536×1536"},
                          fast: {"16:9": "896×512", "9:16": "512×896", "1:1": "768×768"}},
-                 h3: {quality: {"16:9": "1344×768", "9:16": "768×1344", "1:1": "768×768"},
+                 h3: {quality: {"16:9": "1920×1088", "9:16": "1088×1920", "1:1": "1088×1088"},
                       fast: {"16:9": "1024×576", "9:16": "576×1024", "1:1": "640×640"}}};
   const ENGINES = [["ltx25", "LTX-2.5"], ["h3", "MiniMax H3"]];
   // the delivery size: the format's shape with the chosen short side (fv/formats.py deliver_size)
@@ -870,9 +870,9 @@ async function viewBrief(){
     $("#engs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.engine = el.dataset.v; saveBrief(); drawTiers(); if (S.models) drawModels(); });
     const f = rs.quality[b.format] ? b.format : "16:9";
     const t = eng === "h3"
-      ? [["quality","Quality",rs.quality[f],"MiniMax H3 at its native size, 24 fps: your vocal copied 1:1, the lyrics in every prompt. The slowest."],
+      ? [["quality","Quality",rs.quality[f],"MiniMax H3 at 1080p, 24 fps: rendered at its native size, then lifted with its latent upscaler. Your vocal copied 1:1, the lyrics in every prompt. The slowest."],
          ["fast","Fast",rs.fast[f],"H3 at a smaller size, for checking the cast and the cut."]]
-      : [["quality","Quality",rs.quality[f],"LTX-2.5 at the full size, 25 fps clips lip-synced to your vocal."],
+      : [["quality","Quality",rs.quality[f],"LTX-2.5 at 1080p, 25 fps clips lip-synced to your vocal."],
          ["fast","Fast",rs.fast[f],"LTX-2.5 at a smaller size, for checking the cast and the cut."]];
     $("#tiers").innerHTML = t.map(x => { const e = estimate(Object.assign({}, b, {preset:x[0]})); return `<button type="button" class="tier" data-q="${x[0]}" aria-pressed="${b.preset===x[0]}"><span class="t"><span><b>${x[1]}</b><span class="mono muted" style="font-size:12px;margin-left:8px">${x[2]}</span></span><span class="eta">≈ ${mins(e)}</span></span><small>${x[3]}</small></button>`; }).join("");
     $("#tiers").querySelectorAll(".tier").forEach(el => el.onclick = () => { b.preset = el.dataset.q; saveBrief(); drawTiers(); });

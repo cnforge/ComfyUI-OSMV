@@ -179,7 +179,7 @@ Some things that help:
 | Length and start | seconds (0 = the whole song); a start time, or auto | 30 s from the strongest stretch |
 | Format | 16:9 (1920×1080), 9:16 (1080×1920), 1:1 (1080×1080) | 16:9 |
 | Engine | ltx-2.5 (LTX-2.5 distilled, lip sync from the vocal), minimax-h3 (MiniMax H3 reference mode: the portrait, the vocal copied 1:1, the lyrics from Whisper; 24 fps, at least 4.5 s a clip; slower) | ltx-2.5 |
-| Quality | quality (LTX-2.5: clips at 1280×768 for 16:9, 25 fps; H3: 1344×768, 24 fps), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
+| Quality | quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
 | Cast order | as written, mixed | as written |
@@ -189,10 +189,21 @@ Some things that help:
 | Seed | any number | 1 |
 | Models | auto, 24gb (fp8), full (bf16, 48 GB+ GPUs) | auto |
 
-Both are upscaled to 1080p (1920×1080, 1080×1920 or 1080×1080) and cut at 25 fps. 9:16 and 1:1
-use the same sizes turned or squared (LTX-2.5: 768×1280 and 1024×1024 at quality, 512×896 and
-768×768 at fast; H3: 768×1344 and 768×768, 576×1024 and 640×640). Runs made before the engine
-choice rendered on LTX-2.3, which is retired; their re-cuts and re-shoots still work.
+Quality renders at 1080p and above, so a 1080p cut is made from real detail; fast is scaled up
+to the delivery size. 9:16 and 1:1 use the same sizes turned or squared (LTX-2.5: 1152×1920 and
+1536×1536 at quality, 512×896 and 768×768 at fast; H3: 1088×1920 and 1088×1088, 576×1024 and
+640×640). Clips are saved near-lossless (H.264 at crf 10), so the cut is the only real
+compression. Runs made before 1080p Quality keep their own sizes (1280×768 on LTX, 1344×768 on
+H3) for re-cuts and re-shoots; runs made before the engine choice rendered on LTX-2.3, which is
+retired, and their re-cuts and re-shoots still work.
+
+H3 at quality runs its first 6 of 8 steps at its native size (1344×768), lifts the clip with
+H3's latent upscaler and runs the last 2 at 1920×1088 ([comfyui-SelfLift](https://github.com/facok/comfyui-SelfLift)
+and `minimax_h3_latent_upscaler_3d_fp32.pth` in `models/latent_upscale_models`, from
+[LBH-123-AI/Minimax_h3_latent_Upscaler](https://huggingface.co/LBH-123-AI/Minimax_h3_latent_Upscaler)).
+It takes about 60% longer than a native-size clip. Without them, H3 quality renders at its
+native size and is scaled up. On a GPU with less than 40 GB, quality keeps the earlier sizes
+(1280×768 on LTX-2.5, 1344×768 on H3) to fit in memory.
 
 MiniMax H3 needs ComfyUI's MiniMax H3 nodes (a recent ComfyUI), its reference model, the Qwen3-VL
 32B H3 text encoder and the H3 video and audio VAEs (`h3_*` in `fv/models.json`); its lyrics come

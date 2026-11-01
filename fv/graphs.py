@@ -243,8 +243,10 @@ def _save_video(g, images, fps, prefix, audio=None):
     if audio is not None:
         kw["audio"] = audio
     v = g.add("CreateVideo", **kw)
+    # near-lossless (crf 10): the cut is the only real compression a clip goes through
     g.add("SaveVideo", video=O(v), filename_prefix=prefix,
-          **{"format": "mp4", "format.codec": "auto"})
+          **{"format": "mp4", "format.codec": "h264", "format.codec.encoding": "re-encode",
+             "format.codec.encoding.crf": 10.0})
 
 
 # ------------------------------------------------------------------ Krea 2 W5
@@ -367,19 +369,21 @@ CONTINUITY = "One continuous take with no cuts: the same person in the same plac
 def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
                audio_path=None, audio_seek=0.0, guide_video=None, guide_start=0.0,
                guide_strength=1.0, guide_face=True, save_pose=False, key_strengths=None,
-               keyframes=None, continuity=True):
+               keyframes=None, continuity=True, size=None):
     """One LTX clip. audio_path -> lip sync on a frozen vocal latent (voice);
     guide_video -> DWPose union-control guide (twins, motion).
     keyframes: [(image_path, frame_idx, strength)] pinned at later frames of the clip, in every
     stage (a look group: one clip that switches person on the beat, each look's keyframe pinned
-    at its cut frame; continuity=False, since the clip is meant to change person)."""
+    at its cut frame; continuity=False, since the clip is meant to change person).
+    size: the clip's (last stage's) size, the run's own (formats.render_size with its plan);
+    None for the preset's current size."""
     pr = formats.PRESETS[preset]
     if pr["engine"] == "h3":  # the same call renders on MiniMax H3 (its prompt written for it)
         return h3_render(preset=preset, fmt=fmt, key_path=key_path, prompt=prompt, frames=frames, seed=seed,
                          prefix=prefix, audio_path=audio_path, audio_seek=audio_seek, guide_video=guide_video,
-                         guide_start=guide_start)
+                         guide_start=guide_start, size=size)
     fps = pr["fps"]
-    sizes = formats.stage_sizes(fmt, preset)
+    sizes = formats.stage_sizes(fmt, preset, size)
     g = Graph()
     union = guide_video is not None
     m = _ltx23(g, union) if pr["engine"] == "ltx23_r8" else _ltx25(g, union)
@@ -481,6 +485,7 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
 
 # ------------------------------------------------------------------ MiniMax H3
 H3_STEPS = 8          # the fast omni-reference model's schedule
+H3_LIFT_AT = 6        # SelfLift: steps at the native size before the lift (the last 2 at full size)
 H3_SHIFT = (12.0, 3.0)  # ModelSamplingMiniMaxH3: video, audio
 
 
@@ -494,14 +499,36 @@ def _h3(g):
     return dict(model=model, clip=O(clip), vae=O(vae), avae=O(avae))
 
 
+def h3_upscaler() -> str | None:
+    """The H3 latent upscaler SelfLift lifts Quality clips with, or None (no SelfLift node or
+    no upscaler file: Quality then renders at H3's native size and is scaled up)."""
+    if not _has_node("SelfLiftH3Sampler"):
+        return None
+    try:
+        import folder_paths  # type: ignore
+        names = folder_paths.get_filename_list("latent_upscale_models")
+    except Exception:
+        return "minimax_h3_latent_upscaler_3d_fp32.pth"  # outside ComfyUI: the tested one
+    h3 = sorted((n for n in names if "minimax_h3_latent_upscaler" in n.lower()),
+                key=lambda n: ("3d_fp32" not in n, n))  # 3d_fp32: the one tested on OneShot MV clips
+    return h3[0] if h3 else None
+
+
 def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path=None, audio_seek=0.0,
-              guide_video=None, guide_start=0.0):
+              guide_video=None, guide_start=0.0, size=None):
     """One MiniMax H3 clip in reference mode (fv/h3.py writes its prompt): <Picture 1> the
     keyframe, also pinned as the first frame; <Audio 1> the clip's vocal, copied 1:1 and pinned
     at frame 0 so the mouth lands on it; <Video 1> (a look) the lead's clip, for the pose. The
-    take is saved with the original vocal, like an LTX clip."""
+    take is saved with the original vocal, like an LTX clip.
+    Above H3's native size (Quality), the first H3_LIFT_AT steps run at the native size, H3's
+    latent upscaler lifts the clip, and the last steps run at full size (SelfLift); without
+    SelfLift the clip renders at the native size and is scaled up."""
     fps = formats.H3_FPS
-    w, h = formats.render_size(fmt, preset)
+    w, h = size or formats.render_size(fmt, preset)
+    nw, nh = formats.H3_NATIVE[fmt]
+    lift = w * h > nw * nh
+    ups = h3_upscaler() if lift else None
+    rw, rh = (w, h) if ups or not lift else (nw, nh)  # the size H3 samples at
     g = Graph()
     m = _h3(g)
     refs = {}
@@ -515,11 +542,11 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
                      duration=round(frames / float(fps), 4)))
         refs["ref_audios.ref_audio_0"] = au
     if guide_video:
-        vid = g.add("FVLoadVideoPath", path=guide_video, width=w, height=h, frame_cap=frames,
+        vid = g.add("FVLoadVideoPath", path=guide_video, width=nw if lift else w, height=nh if lift else h, frame_cap=frames,
                     start_seconds=float(guide_start), force_fps=float(fps))
         refs["ref_videos.ref_video_0"] = O(vid)
     r2v = g.add("MiniMaxH3ReferenceToVideo", clip=m["clip"], vae=m["vae"], audio_vae=m["avae"], prompt=prompt,
-                width=w, height=h, length=int(frames), ref_image_size="match", **refs)
+                width=rw, height=rh, length=int(frames), ref_image_size="match", **refs)
     pos, lat = O(r2v, 0), O(r2v, 1)
     if key is not None or au is not None:
         kw = {"image": O(key), "vae": m["vae"]} if key is not None else {}
@@ -528,12 +555,21 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
         pos = O(g.add("MiniMaxH3AddGuide", positive=pos, latent=lat, frame_idx=0, **kw))
     guider = g.add("BasicGuider", model=m["model"], conditioning=pos)
     sig = g.add("BasicScheduler", model=m["model"], scheduler="beta", steps=H3_STEPS, denoise=1.0)
-    s = g.add("SamplerCustomAdvanced", noise=O(g.add("RandomNoise", noise_seed=seed)), guider=O(guider),
-              sampler=O(g.add("KSamplerSelect", sampler_name="euler")), sigmas=O(sig), latent_image=lat)
-    dec = g.add("VAEDecode", samples=O(s), vae=m["vae"])
+    euler = g.add("KSamplerSelect", sampler_name="euler")
+    if ups:
+        s = g.add("SelfLiftH3Sampler", model=m["model"], positive=pos, negative=pos, vae=m["vae"], latent_image=lat,
+                  sampler=O(euler), sigmas=O(sig), seed=seed, cfg=1.0, transition_step=H3_LIFT_AT,
+                  lowres_scale=round(nh / h, 4), rho=0.0, w_min=0.5, w_max=1.0, upscaler_model=ups,
+                  upscaler_unload=True)
+    else:
+        s = g.add("SamplerCustomAdvanced", noise=O(g.add("RandomNoise", noise_seed=seed)), guider=O(guider),
+                  sampler=O(euler), sigmas=O(sig), latent_image=lat)
+    dec = O(g.add("VAEDecode", samples=O(s), vae=m["vae"]))
+    if (rw, rh) != (w, h):
+        dec = O(g.add("ImageScale", image=dec, upscale_method="lanczos", width=w, height=h, crop="disabled"))
     if au is None:  # no vocal (b-roll): keep H3's own sound
         au = O(g.add("VAEDecodeAudio", samples=O(s), vae=m["avae"]))
-    _save_video(g, O(dec), fps, prefix, audio=au)
+    _save_video(g, dec, fps, prefix, audio=au)
     return g
 
 

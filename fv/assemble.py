@@ -147,9 +147,9 @@ def assemble(run_dir: str, *, fx_intensity: float = 1.0, do_finish: bool = True,
         pack["finish"] = dict(pack["finish"], **plan["finish_user"])
     fps = plan["out_fps"]
     fmt = plan["format"]
-    rw, rh = formats.render_size(fmt, plan["preset"])
+    rw, rh = formats.render_size(fmt, plan["preset"], plan)
     dw, dh = formats.deliver_size(fmt, plan.get("resolution"))
-    cx, cy, cw, ch = formats.deliver_crop(fmt, plan["preset"]) if rw * rh else (0, 0, rw, rh)
+    cx, cy, cw, ch = formats.deliver_crop(fmt, plan["preset"], plan) if rw * rh else (0, 0, rw, rh)
     n_out = int(round(plan["duration"] * fps))
     if device is None:
         try:

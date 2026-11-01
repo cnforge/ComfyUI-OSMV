@@ -11,17 +11,27 @@ from __future__ import annotations
 import math
 
 FORMATS = {
-    # name: (render w, h at quality), (render w, h at fast), delivery (w, h)
-    "16:9": {"quality": (1280, 768), "fast": (896, 512), "deliver": (1920, 1080)},
-    "9:16": {"quality": (768, 1280), "fast": (512, 896), "deliver": (1080, 1920)},
-    "1:1": {"quality": (1024, 1024), "fast": (768, 768), "deliver": (1080, 1080)},
+    # name: (render w, h at quality), (render w, h at fast), delivery (w, h). Quality renders at
+    # 1080p and above (stage 1 at half that), so a 1080p cut is made from real detail.
+    "16:9": {"quality": (1920, 1152), "fast": (896, 512), "deliver": (1920, 1080)},
+    "9:16": {"quality": (1152, 1920), "fast": (512, 896), "deliver": (1080, 1920)},
+    "1:1": {"quality": (1536, 1536), "fast": (768, 768), "deliver": (1080, 1080)},
 }
-# MiniMax H3 renders on its own 32-px canvas: 768 on the short side (its native size), or 576
-# at fast. Square stays 768 x 768 (H3 caps the area at 768 x 1344).
-_H3 = {"16:9": ((1344, 768), (1024, 576)), "9:16": ((768, 1344), (576, 1024)), "1:1": ((768, 768), (640, 640))}
+# MiniMax H3 renders on its own 32-px canvas, 768 on the short side (its native size), or 576
+# at fast. Quality finishes at 1088 on the short side: the first steps run at the native size,
+# then H3's latent upscaler lifts the clip and the last steps add the detail (SelfLift, see
+# graphs.h3_render). H3_NATIVE is the size those first steps run at.
+_H3 = {"16:9": ((1920, 1088), (1024, 576)), "9:16": ((1088, 1920), (576, 1024)), "1:1": ((1088, 1088), (640, 640))}
+H3_NATIVE = {"16:9": (1344, 768), "9:16": (768, 1344), "1:1": (768, 768)}
 for _k, _f in FORMATS.items():
     _f["fast_voice"] = _f["fast"]  # older runs' singing-at-fast preset
     _f["h3"], _f["h3_fast"] = _H3[_k]
+# what Quality rendered at before 1080p: runs planned then (no "render_wh" in their plan) are
+# cut and re-shot at these sizes
+LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "h3": (1344, 768)},
+                "9:16": {"quality": (768, 1280), "h3": (768, 1344)},
+                "1:1": {"quality": (1024, 1024), "h3": (768, 768)}}
+HIRES_MIN_GB = 40  # 1080p Quality needs this much GPU memory; smaller cards render at LEGACY_SIZES
 FORMAT_NAMES = list(FORMATS)  # 16:9 first: the default
 
 PRESETS = {
@@ -64,13 +74,19 @@ def base_sync_delay(plan: dict) -> float:
     return float(PRESETS.get(plan.get("preset"), {}).get("sync_delay", 0.0))
 
 
-def render_size(fmt: str, preset: str) -> tuple[int, int]:
+def render_size(fmt: str, preset: str, plan: dict | None = None) -> tuple[int, int]:
+    """The clips' size: a run's own (its plan's "render_wh"), else today's for the preset. A
+    plan from before 1080p Quality gets the size its clips were rendered at."""
+    if plan is not None:
+        if plan.get("render_wh"):
+            return tuple(plan["render_wh"])
+        return LEGACY_SIZES.get(fmt, {}).get(preset) or FORMATS[fmt][preset]
     return FORMATS[fmt][preset]
 
 
-def stage_sizes(fmt: str, preset: str) -> list[tuple[int, int]]:
-    """Sizes of every stage, smallest first."""
-    w, h = render_size(fmt, preset)
+def stage_sizes(fmt: str, preset: str, size: tuple[int, int] | None = None) -> list[tuple[int, int]]:
+    """Sizes of every stage, smallest first (`size`: the last stage's, else the preset's)."""
+    w, h = size or render_size(fmt, preset)
     n = PRESETS[preset]["stages"]
     out = [(w >> (n - 1 - i), h >> (n - 1 - i)) for i in range(n)]
     for (sw, sh) in out[:1] if PRESETS[preset]["engine"] != "h3" else []:
@@ -91,9 +107,9 @@ def deliver_size(fmt: str, resolution: int | None = None) -> tuple[int, int]:
     return int(round(w * k / 2)) * 2, int(round(h * k / 2)) * 2
 
 
-def deliver_crop(fmt: str, preset: str) -> tuple[int, int, int, int]:
+def deliver_crop(fmt: str, preset: str, plan: dict | None = None) -> tuple[int, int, int, int]:
     """(x, y, w, h) centre crop of a render frame with the delivery aspect."""
-    rw, rh = render_size(fmt, preset)
+    rw, rh = render_size(fmt, preset, plan)
     dw, dh = deliver_size(fmt)
     if rw * dh > dw * rh:  # render is wider than delivery
         w = int(round(rh * dw / dh / 2)) * 2

@@ -286,7 +286,7 @@ def _estimate(b: dict) -> dict:
     total = sum(x["s"] for x in parts)
     return {"total_s": int(total), "parts": parts, "shots": len(p["shots"]), "need": need,
             "world_cached": bool(bible) and have >= need, "window": [round(p["song_t0"], 2), round(p["song_t1"], 2)],
-            "render_min": round(6 + (2.0 if b.get("preset", "quality") == "quality" else 1.0) * win)}
+            "render_min": round(6 + (2.5 if b.get("preset", "quality") == "quality" else 1.0) * win)}
 
 
 def _project(d: str) -> str:
@@ -574,7 +574,7 @@ def _notes(d: str, p: dict, label_of: dict, done: bool = False) -> list[dict]:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = {"quality": 2.0, "h3": 3.0, "h3_fast": 2.0}.get(p.get("preset"), 1.0)
+    per = {"quality": 2.5, "h3": 5.0, "h3_fast": 2.0}.get(p.get("preset"), 1.0)
     return 6 + per * dur
 
 
@@ -1117,7 +1117,7 @@ def _preview_frame(d: str, p: dict, shot: int | None):
     import torch
     from . import formats
     from .assemble import ClipReader
-    rw, rh = formats.render_size(p["format"], p["preset"])
+    rw, rh = formats.render_size(p["format"], p["preset"], p)
     shots = p.get("shots", [])
     if shot is None:  # a close-up in the loudest part, else the first sung shot
         cands = [s for s in shots if s.get("energy") == "high" and s.get("size") == "close"] or shots
@@ -1144,7 +1144,7 @@ def _lab_cache(d: str, p: dict):
     hit = _load(cp)
     if hit:
         return torch.tensor(hit["mean"]), torch.tensor(hit["std"])
-    rw, rh = formats.render_size(p["format"], p["preset"])
+    rw, rh = formats.render_size(p["format"], p["preset"], p)
     samples = []
     for r in p["renders"][:: max(1, len(p["renders"]) // 12)]:
         rd = ClipReader(r.get("path", ""), (rw, rh))
@@ -1168,8 +1168,8 @@ def _graded(d: str, p: dict, frame, look: str, overrides: dict | None = None, w:
     cfg.update(overrides or {})
     cfg["look"] = look
     y = Finisher(cfg, _lab_cache(d, p), seed=3)(frame, 0)
-    rw, rh = formats.render_size(p["format"], p["preset"])
-    cx, cy, cw, ch = formats.deliver_crop(p["format"], p["preset"])
+    rw, rh = formats.render_size(p["format"], p["preset"], p)
+    cx, cy, cw, ch = formats.deliver_crop(p["format"], p["preset"], p)
     if (cw, ch) != (rw, rh):
         y = y[cy:cy + ch, cx:cx + cw]
     w = min(w, y.shape[1])
@@ -1225,8 +1225,8 @@ def _grain_preview(name: str, look: str, grain: float, size: float, shot: int | 
     cfg.update({"look": look, "grain": grain, "grain_size": size, "vignette": 0})
     fin = _fv("finish").Finisher(cfg, _lab_cache(d, p), seed=3)
     y = fin.grade(frame)
-    rw, rh = formats.render_size(p["format"], p["preset"])
-    cx, cy, cw, ch = formats.deliver_crop(p["format"], p["preset"])
+    rw, rh = formats.render_size(p["format"], p["preset"], p)
+    cx, cy, cw, ch = formats.deliver_crop(p["format"], p["preset"], p)
     dw, dh = formats.deliver_size(p["format"])
     y = y[cy:cy + ch, cx:cx + cw]
     if (dw, dh) != (cw, ch):

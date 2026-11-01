@@ -80,7 +80,7 @@ def write_xml(plan: dict, path: str, final_video: str = "", song: str = "") -> s
     n_out = int(round(float(plan["duration"]) * fps))
     from . import formats
     dw, dh = formats.deliver_size(plan["format"], plan.get("resolution"))
-    rw, rh = formats.render_size(plan["format"], plan["preset"])
+    rw, rh = formats.render_size(plan["format"], plan["preset"], plan)
     delay0 = formats.base_sync_delay(plan)
     rate = f"<rate><timebase>{tb}</timebase><ntsc>FALSE</ntsc></rate>"
     files_done = set()

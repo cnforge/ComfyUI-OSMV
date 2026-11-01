@@ -259,6 +259,10 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     if resolution and resolution in formats.RESOLUTIONS:
         p["resolution"] = int(resolution)
     p["engine"] = formats.engine_of(preset)
+    rsize = formats.render_size(fmt, preset)
+    if 0 < graphs.vram_gb() < formats.HIRES_MIN_GB:  # 1080p Quality is for 48 GB+ cards
+        rsize = formats.LEGACY_SIZES[fmt].get(preset, rsize)
+    p["render_wh"] = list(rsize)  # re-cuts and re-shoots keep this size
     log(f"[OneShotMV] {mode} plan: {len(p['renders'])} renders, window {p['song_t0']:.2f}-{p['song_t1']:.2f}s, "
         f"tempo {p['tempo']}")
 
@@ -280,7 +284,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         p["broll_share"] = float(broll_share)
         p["broll_style"] = broll_style if broll_style in ("mix", "world", "dance") else "mix"
 
-    rsize = formats.render_size(fmt, preset)
+    rsize = formats.render_size(fmt, preset, p)
     jobs: list[tuple[str, dict]] = []
     staged = bool(staged) and mode == "voice" and queue and queue_assemble and qc_retries > 0 \
         and _node_available("FVQC") and _node_available("FVKeep")
@@ -363,7 +367,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         for r in [r for r in p["renders"] if r["role"] == "A"]:
             c = cast[r["performer"]]
             jobs.append((f"r{r['id']:03d}A", graphs.ltx_render(
-                preset=preset, fmt=fmt, key_path=port[r["performer"]], prompt=sing_for[r["id"]], negative=_neg(neg, r),
+                preset=preset, fmt=fmt, size=rsize, key_path=port[r["performer"]], prompt=sing_for[r["id"]], negative=_neg(neg, r),
                 frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}A",
                 audio_path=vocal_path, audio_seek=seek(r)).nodes))
         twins_ = [r for r in p["renders"] if r["role"] == "B"]
@@ -404,7 +408,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
             a = by_id[r["twin_of"]]
             c = cast[r["performer"]]
             jobs.append((f"r{r['id']:03d}B", graphs.ltx_render(
-                preset=preset, fmt=fmt, key_path=r["key"], prompt=_clip_prompt(p, run_dir, r, _sing(c["sing"], a, dense_from), a, look=True),
+                preset=preset, fmt=fmt, size=rsize, key_path=r["key"], prompt=_clip_prompt(p, run_dir, r, _sing(c["sing"], a, dense_from), a, look=True),
                 negative=_neg(neg, a),
                 frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}B",
                 audio_path=vocal_path, audio_seek=seek(r), guide_video=a["path"],
@@ -422,7 +426,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         for r in p["renders"]:
             c = cast[r["performer"] % len(cast)]
             jobs.append((f"r{r['id']:03d}{r['role']}", graphs.ltx_render(
-                preset=preset, fmt=fmt, key_path=r["key"], prompt=c["video"], negative=neg,
+                preset=preset, fmt=fmt, size=rsize, key_path=r["key"], prompt=c["video"], negative=neg,
                 frames=r["frames"], seed=c["seed"] + 17 * (r["role"] == "MB"),
                 prefix=f"{rel}/r{r['id']:03d}{r['role']}",
                 guide_video=dance_path, guide_start=r["src_start"], guide_strength=guide_strength,
@@ -803,7 +807,7 @@ def _looks_jobs(p: dict, run_dir: str, log=print) -> tuple[list[dict], list[dict
             else:
                 b["unusable"] = ["group_pin"]
         name = f"g{gs['shot']:03d}"
-        g = graphs.ltx_render(preset=p["preset"], fmt=p["format"], key_path=looks[0]["key"], prompt=_group_prompt(gs),
+        g = graphs.ltx_render(preset=p["preset"], fmt=p["format"], size=formats.render_size(p["format"], p["preset"], p), key_path=looks[0]["key"], prompt=_group_prompt(gs),
                               negative=gs["neg"] + GROUP_NEG, frames=frames, seed=gs["seed"], prefix=f"{rel}/{name}",
                               audio_path=vp, audio_seek=round(t0g + p["song_t0"] - p.get("stems_t0", 0.0), 4),
                               guide_video=a["path"], guide_start=looks[0].get("guide_start", 0.0),
@@ -896,7 +900,7 @@ def _fallback_looks(p: dict, run_dir: str, log=print) -> tuple[list[dict], list[
         json.dump(kg, open(os.path.join(run_dir, "jobs", f"fb_{name}.json"), "w", encoding="utf-8"), indent=1)
         key = os.path.join(run_dir, f"{name}_00001_.png")
         c = cast[r["performer"]]
-        rg = graphs.ltx_render(preset=p["preset"], fmt=p["format"], key_path=key,
+        rg = graphs.ltx_render(preset=p["preset"], fmt=p["format"], size=formats.render_size(p["format"], p["preset"], p), key_path=key,
                                prompt=_clip_prompt(p, run_dir, r, _sing(c["sing"], a, dense_from), a, look=True),
                                negative=gs["neg"],
                                frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}B",
