@@ -866,8 +866,10 @@ async function viewBrief(){
     if (miss.length) t += ` Missing ${miss.length === 1 ? "one file" : miss.length + " files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`;
     const packs = r.missing_packs || [];
     if (packs.length) t += ` ${packs.join(", ")} didn't load in ComfyUI (look for IMPORT FAILED in its console), so nothing can render.`;
-    $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!(miss.length || packs.length));
-    if (miss.length || packs.length) $("details.adv").open = true;  // a warning never hides in the folded card
+    const checks = r.missing_checks || [];
+    if (checks.length) t += ` Not installed: ${checks.join(", ")}. Runs still work, but ${checks.some(c => c.startsWith("SyncNet")) ? "lip sync isn't measured or fixed take by take" : "faces aren't tracked"}; the README lists the downloads.`;
+    $("#mnote").textContent = t; $("#mnote").classList.toggle("warn", !!(miss.length || packs.length || checks.length));
+    if (miss.length || packs.length || checks.length) $("details.adv").open = true;  // a warning never hides in the folded card
   };
   drawModels();
   if (S.models) drawModels();  // then fresh: files may have landed since the page opened

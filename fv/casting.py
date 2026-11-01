@@ -68,6 +68,45 @@ def articulate(text: str, sentence: str | None = None) -> str:
     return text[:m.start()] + sentence + tail + text[m.end():]
 
 
+# A lead shot with (almost) no vocal under it: an instrumental stretch (a drop, an intro, a break).
+# Prompted to sing, LTX mimes words to a silent vocal stem and it reads as broken lip sync, so the
+# singer listens instead: mouth closed, moving with the beat (vocal_density, fv/lipsync.py).
+INSTRUMENTAL_BELOW = 0.1
+_NOT_SINGING = "the mouth closed, not singing"
+_QUIET = (
+    (re.compile(r"sings along to the song the way a real person sings a song they love\."),
+     "listens to the song the way a real person listens to a song they love, " + _NOT_SINGING + "."),
+    (re.compile(r"singing along to the song the way a real person sings a song they love\."),
+     "lost in the song the way a real person listens to a song they love, " + _NOT_SINGING + "."),
+    (re.compile(r"singing along to the song\."), "lost in the music, " + _NOT_SINGING + "."),
+    (re.compile(r"singing and dancing loosely to the beat, the lips forming the words,"),
+     "dancing loosely to the beat, " + _NOT_SINGING + ","),
+    (re.compile(r"singing along, the lips forming the words,"), _NOT_SINGING + ","),
+    # a medium or wide shot's default action ("singing")
+    (re.compile(r"\bsinging, (?=lost in)"), ""),
+    (re.compile(r"\bsinging, (?=the mouth closed)"), "swaying to the music, "),
+)
+_QUIET_LIPS = "The lips stay together, the head nods and sways with the beat, a blink now and then, natural breathing."
+
+
+def instrumental(text: str) -> str:
+    """A sing prompt rewritten for a shot with no vocal under it (no-op if already done)."""
+    if _NOT_SINGING in text:
+        return text
+    for rx, sub in _QUIET:
+        text = rx.sub(sub, text)
+    text = _LIPS.sub(_QUIET_LIPS, text, count=1).replace(ARTICULATE, _QUIET_LIPS)
+    if _NOT_SINGING not in text:  # a pack's own wording: say it plainly at the end
+        text = text.rstrip() + " Not singing: " + _NOT_SINGING[4:] + "."
+    return text
+
+
+def instrumental_negative(neg: str) -> str:
+    """The negative prompt for such a shot: no singing, and a closed mouth is no longer a fault."""
+    parts = [x.strip() for x in neg.split(",") if x.strip() and x.strip() != "closed mouth"]
+    return ", ".join(parts + ["singing", "talking", "open mouth", "lip movement"])
+
+
 def _frame(c: dict, size: str) -> dict:
     fr = c.get("framing") or DEFAULT_FRAMING
     return fr.get(size) or fr.get("close") or next(iter(fr.values()))

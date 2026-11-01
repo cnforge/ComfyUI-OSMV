@@ -158,7 +158,18 @@ def models_report() -> dict:
     return {"vram_gb": round(vram_gb(), 1), "reserved_gb": round(reserved_gb(), 1),
             "auto": pick_models("auto"), "full_min_gb": FULL_MIN_GB,
             "missing": {n: missing_files(n, idx) for n in MODEL_SETS}, "missing_packs": missing_nodes(),
-            "missing_character": missing_files("24gb", idx, ARTIST_KEYS)}  # the same files in both sets
+            "missing_character": missing_files("24gb", idx, ARTIST_KEYS),  # the same files in both sets
+            "missing_checks": missing_checks()}
+
+
+def missing_checks() -> list:
+    """Optional QC models a run works without, but worse: SyncNet (each take's lip-sync offset and
+    its re-rolls) and YuNet (faces on OpenCV 5, which has no Haar cascades)."""
+    from . import faces, lipsync
+    out = [] if lipsync.available() else ["SyncNet (syncnet_v2.model and sfd_face.pth in models/syncnet)"]
+    if faces._cascade() is None:
+        out.append(f"YuNet ({faces.YUNET} in models/facedetection)")
+    return out
 
 
 def use_models(name: str | None = "auto") -> str:

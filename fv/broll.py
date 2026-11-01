@@ -2,8 +2,8 @@
 a candid moment of their own life (every cutaway has a person in it: empty environment shots look
 like filler), and performers dancing to the track (medium shots, not full body) as filler.
 
-About one shot in eight (`broll_share`), never on the drop and never the opening shot, never
-two in a row. Slots are filled first where lip sync is still weak after the re-rolls (a sung
+About one shot in eight (`broll_share`), never the opening shot, never two in a row, and on
+the drop only where nobody sings (an instrumental drop). Slots are filled first where lip sync is still weak after the re-rolls (a sung
 shot whose SyncNet confidence stayed low), then in instrumental gaps (a lead with almost no
 vocal under it). Each world cutaway is written as an image prompt by the same local language
 model as themes (fv/theme.py), from one of the World's places and lights; Krea 2 makes the still
@@ -66,9 +66,14 @@ def slots(p: dict, share: float) -> int:
     if share <= 0 or not p.get("shots"):
         return 0
     n = max(1, int(round(len(p["shots"]) * share)))
-    ok = [s for s in p["shots"] if s.get("phase", "quiet") in ("quiet", "build") and s.get("index", 0) > 0
-          and s["t1"] - s["t0"] >= 1.0]
+    by_id = {r["id"]: r for r in p.get("renders", [])}
+    ok = [s for s in p["shots"] if _open(s, by_id) and s.get("index", 0) > 0 and s["t1"] - s["t0"] >= 1.0]
     return max(1, min(n, len(ok) // 3)) if ok else 0
+
+
+def _open(s: dict, by_id: dict) -> bool:
+    """A shot a cutaway may replace: a quiet or build shot, or a drop shot nobody sings over."""
+    return s.get("phase", "quiet") in ("quiet", "build") or bool(by_id.get(s.get("A"), {}).get("instrumental"))
 
 
 def choose(p: dict, share: float = 0.125, sync_min: float = 4.5, sung_from: float = 0.55,
@@ -82,7 +87,7 @@ def choose(p: dict, share: float = 0.125, sync_min: float = 4.5, sung_from: floa
     n = n if n is not None else max(1, int(round(len(shots) * share)))
     if n <= 0:
         return []
-    cands = [s for s in shots if s.get("phase", "quiet") in ("quiet", "build") and s.get("index", 0) > 0
+    cands = [s for s in shots if _open(s, by_id) and s.get("index", 0) > 0
              and s["t1"] - s["t0"] >= 1.0 and "A" in s and (only is None or s["index"] in only)]
 
     def lead(s):

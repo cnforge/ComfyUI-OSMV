@@ -310,8 +310,9 @@ def image_bars(path: str) -> float:
 
 def check_clip(path: str, *, expected_frames: int = 0, voice: bool = False, vocal=None, sr: int = 44100,
                seek: float = 0.0, sync: bool = False, people: bool = False, framing: str | None = None,
-               ref=None, key_path: str | None = None) -> dict:
-    """framing: the shot size ('close' / 'medium' / 'wide') to check the face against (noface,
+               ref=None, key_path: str | None = None, sung: bool = True) -> dict:
+    """sung: False for a shot over an instrumental stretch (its closed mouth is no fault);
+    framing: the shot size ('close' / 'medium' / 'wide') to check the face against (noface,
     tooclose); ref: the artist's face embedding (fv/identity.py) for the identity check, judged on
     key_path (a look's keyframe) when given, else on the clip."""
     r = {"path": path, "ok": True, "fail": [], "score": 1.0, "v": VERSION}
@@ -402,7 +403,7 @@ def check_clip(path: str, *, expected_frames: int = 0, voice: bool = False, voca
                     r["mouth_corr"] = round(c, 3)
                     singing = float((env > 0.25 * env.max()).mean())
                     r["singing_frac"] = round(singing, 2)
-                if ratio < THRESH["mouth_ratio"] and dark.std() < THRESH["mouth_dark_std"]:
+                if sung and ratio < THRESH["mouth_ratio"] and dark.std() < THRESH["mouth_dark_std"]:
                     r["fail"].append("mouth")
         if sync:
             try:

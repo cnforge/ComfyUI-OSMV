@@ -335,19 +335,21 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         if vx is not None:
             vx = vx.mean(0) if vx.ndim == 2 else vx
             vref = float(np.sqrt(np.mean(vx ** 2) + 1e-12))
-        dense_from = float(pk["casting"].get("dense_from", 0.6))
+        dense_from, quiet_below = _density_bounds(pk)
         sing_for = {}
         for r in [r for r in p["renders"] if r["role"] == "A"]:
-            text = cast[r["performer"]]["sing"]
             if vx is not None:
                 r["vocal_density"] = round(lipsync.vocal_density(vx, vsr, seek(r), r["frames"] / r["fps"], vref), 3)
-                if r["vocal_density"] >= dense_from:
-                    text = casting.articulate(text)
-            sing_for[r["id"]] = text
+                if r["vocal_density"] < quiet_below:
+                    r["instrumental"] = True
+            sing_for[r["id"]] = _sing(cast[r["performer"]]["sing"], r, dense_from)
+        for r in p["renders"]:  # a look sings (or not) with its lead
+            if r["role"] == "B" and by_id[r["twin_of"]].get("instrumental"):
+                r["instrumental"] = True
         for r in [r for r in p["renders"] if r["role"] == "A"]:
             c = cast[r["performer"]]
             jobs.append((f"r{r['id']:03d}A", graphs.ltx_render(
-                preset=preset, fmt=fmt, key_path=port[r["performer"]], prompt=sing_for[r["id"]], negative=neg,
+                preset=preset, fmt=fmt, key_path=port[r["performer"]], prompt=sing_for[r["id"]], negative=_neg(neg, r),
                 frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}A",
                 audio_path=vocal_path, audio_seek=seek(r)).nodes))
         twins_ = [r for r in p["renders"] if r["role"] == "B"]
@@ -375,10 +377,10 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                     continue
                 a = by_id[s["A"]]
                 first = cast[ch[0]["performer"]]
-                sing = casting.articulate(first["sing"]) if a.get("vocal_density", 0.0) >= dense_from else first["sing"]
+                sing = _sing(first["sing"], a, dense_from)
                 p["look_groups"].append({"shot": s["index"], "lead": a["id"], "looks": [b["id"] for b in ch],
                                          "who": [_who_short(cast[b["performer"]]) for b in ch], "sing": sing,
-                                         "seed": first["seed"], "neg": neg, "guide_strength": guide_strength,
+                                         "seed": first["seed"], "neg": _neg(neg, a), "guide_strength": guide_strength,
                                          "shot_t1": s["t1"]})
                 for b in ch:
                     b["group"] = s["index"]
@@ -387,9 +389,8 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                 continue
             a = by_id[r["twin_of"]]
             c = cast[r["performer"]]
-            text = casting.articulate(c["sing"]) if a.get("vocal_density", 0.0) >= dense_from else c["sing"]
             jobs.append((f"r{r['id']:03d}B", graphs.ltx_render(
-                preset=preset, fmt=fmt, key_path=r["key"], prompt=text, negative=neg,
+                preset=preset, fmt=fmt, key_path=r["key"], prompt=_sing(c["sing"], a, dense_from), negative=_neg(neg, a),
                 frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}B",
                 audio_path=vocal_path, audio_seek=seek(r), guide_video=a["path"],
                 guide_start=r.get("guide_start", 0.0), guide_strength=guide_strength, guide_face=True).nodes))
@@ -685,7 +686,30 @@ def _group_prompt(gs: dict) -> str:
     seq = "first " + ", then ".join(who) if len(who) > 1 else who[0]
     rest = re.sub(r"^[^.]*\.\s*", "", gs["sing"], count=1)  # drop "Head-and-shoulders shot of X singing ..."
     rest = rest.replace(graphs.CONTINUITY, "").strip()
-    return GROUP_OPEN.format(n=len(who), who=seq) + " " + rest
+    head = GROUP_OPEN
+    if "not singing" in gs["sing"]:  # an instrumental stretch (casting.instrumental): nobody sings
+        head = head.replace("singing the same words straight into the camera",
+                            "each with the mouth closed, not singing, looking straight into the camera")
+    return head.format(n=len(who), who=seq) + " " + rest
+
+
+def _density_bounds(pk: dict) -> tuple[float, float]:
+    """(dense_from, instrumental_below) of vocal_density: dense vocals (rap) get the articulation
+    prompt, (almost) no vocal gets the not-singing one (casting.instrumental)."""
+    c = pk["casting"]
+    return float(c.get("dense_from", 0.6)), float(c.get("instrumental_below", casting.INSTRUMENTAL_BELOW))
+
+
+def _sing(text: str, lead: dict, dense_from: float) -> str:
+    """A singer clip's prompt for its lead's vocal: dense ones articulate (it lifted lip sync on
+    dense shots), instrumental ones don't sing at all (LTX mimes words to a silent stem)."""
+    if lead.get("instrumental"):
+        return casting.instrumental(text)
+    return casting.articulate(text) if lead.get("vocal_density", 0.0) >= dense_from else text
+
+
+def _neg(neg: str, lead: dict) -> str:
+    return casting.instrumental_negative(neg) if lead.get("instrumental") else neg
 
 
 def _looks_jobs(p: dict, run_dir: str, log=print) -> tuple[list[dict], list[dict]]:
@@ -812,7 +836,7 @@ def _fallback_looks(p: dict, run_dir: str, log=print) -> tuple[list[dict], list[
     by_id = {r["id"]: r for r in p["renders"]}
     cast = p.get("cast", [])
     pk = casting.load_pack(p["pack"])
-    dense_from = float(pk["casting"].get("dense_from", 0.6))
+    dense_from, _ = _density_bounds(pk)
     grp = {gs["shot"]: gs for gs in p.get("look_groups", [])}
     rel = p.get("run_rel", "")
     vocals = os.path.join(run_dir, "vocals.wav")
@@ -837,8 +861,8 @@ def _fallback_looks(p: dict, run_dir: str, log=print) -> tuple[list[dict], list[
         json.dump(kg, open(os.path.join(run_dir, "jobs", f"fb_{name}.json"), "w", encoding="utf-8"), indent=1)
         key = os.path.join(run_dir, f"{name}_00001_.png")
         c = cast[r["performer"]]
-        text = casting.articulate(c["sing"]) if a.get("vocal_density", 0.0) >= dense_from else c["sing"]
-        rg = graphs.ltx_render(preset=p["preset"], fmt=p["format"], key_path=key, prompt=text, negative=gs["neg"],
+        rg = graphs.ltx_render(preset=p["preset"], fmt=p["format"], key_path=key, prompt=_sing(c["sing"], a, dense_from),
+                               negative=gs["neg"],
                                frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}B",
                                audio_path=vp, audio_seek=round(r["t_start"] + p["song_t0"] - p.get("stems_t0", 0.0), 4),
                                guide_video=a["path"], guide_start=r.get("guide_start", 0.0),
@@ -909,6 +933,9 @@ def _refresh_prompt(g: dict) -> None:
             t = enc["inputs"].get("text", "")
             if isinstance(t, str) and graphs.CONTINUITY not in t:
                 enc["inputs"]["text"] = f"{t.rstrip()} {graphs.CONTINUITY}"
+
+
+SYNC_TRUST = 2.5  # SyncNet confidence from which a take's measured offset is used
 
 
 def _long(r: dict) -> bool:
@@ -987,7 +1014,8 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
         try:
             res = qc.check_clip(r.get("path", ""), expected_frames=r.get("frames", 0), voice=voice,
                                 vocal=vocal, sr=sr or 44100, seek=seek,
-                                sync=voice and r["role"] == "A" and r.get("size", "close") != "wide" and _long(r),
+                                sync=voice and r["role"] == "A" and r.get("size", "close") != "wide" and _long(r)
+                                and not r.get("instrumental"), sung=not r.get("instrumental"),
                                 people=not voice, **checks(r))
         except Exception as e:  # never let QC block a cut
             res = {"path": r.get("path", ""), "ok": True, "fail": [], "score": 0.5, "error": str(e)}
@@ -1204,7 +1232,8 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
                         seek = r.get("t_start", 0.0) + p.get("song_t0", 0.0) - p.get("stems_t0", 0.0)
                         res = qc.check_clip(t["path"], expected_frames=r.get("frames", 0), voice=voice,
                                             vocal=vocal, sr=sr or 44100, seek=seek,
-                                            sync=voice and r["role"] == "A" and r.get("size", "close") != "wide" and _long(r),
+                                            sync=voice and r["role"] == "A" and r.get("size", "close") != "wide" and _long(r)
+                                and not r.get("instrumental"), sung=not r.get("instrumental"),
                                             people=not voice, **checks(r))
                         t.clear()
                         t.update({k: v for k, v in res.items() if k != "ok"})
@@ -1228,7 +1257,10 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
                     r.pop("unusable", None)
                 # the take's own lip-sync offset (SyncNet, 25 fps frames; negative = the mouth
                 # leads the voice): show it that much later
-                if "sync_offset" in best:
+                # (only where it's sung and SyncNet found the mouth: over an instrumental stretch
+                # or a mushy mouth the offset is noise, and the preset's average is safer)
+                if "sync_offset" in best and best.get("singing_frac25", 1.0) >= qc.THRESH["sync_singing"] \
+                        and best.get("sync_conf", 0.0) >= SYNC_TRUST:
                     r["sync_delay"] = round(min(0.4, max(-0.1, -best["sync_offset"] / 25.0)), 3)
                     r["sync_conf"] = best.get("sync_conf")
         shots = {s["index"]: s for s in p.get("shots", []) if "index" in s}

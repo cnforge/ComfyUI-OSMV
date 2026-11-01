@@ -21,10 +21,13 @@ Everything runs locally in ComfyUI on open-weights models.
 4. Krea 2 paints a portrait of every performer, each one a different person.
 5. A vision check looks at every portrait (one person, the right gender, the whole head in frame,
    no writing, nothing from after the World's period, the right outfit) and redoes the wrong ones.
-6. LTX-2.3 turns each portrait into a clip that sings the isolated vocal.
+6. LTX-2.3 turns each portrait into a clip that sings the isolated vocal. Over an instrumental
+   stretch (an instrumental drop, a break) the singers don't sing: they move to the music with
+   their mouths closed.
 7. A take check re-shoots missing, frozen or blown-out takes, dead mouths, takes that drift to
    another person or place, bad framing, and weak lip sync (scored with SyncNet).
-8. A few shots become b-roll: a World character in a candid moment, not singing.
+8. A few shots become b-roll: a World character in a candid moment, not singing (instrumental
+   stretches first).
 9. It cuts everything on the beat, adds audio-reactive FX driven by the drums, then a color grade,
    grain at 1080p and a vignette. You get an MP4, an EDL and a Final Cut Pro XML.
 
@@ -218,7 +221,8 @@ about every beat on intense.
    - Lip sync (SyncNet): put `syncnet_v2.model` and `sfd_face.pth` in `ComfyUI/models/syncnet/`.
      They come from the [Oxford VGG SyncNet page](https://www.robots.ox.ac.uk/~vgg/software/lipsync/)
      and are mirrored in [syncnet-python](https://github.com/nawta/SyncNet_py309_313/tree/main/weights).
-     Without them the take check skips lip sync.
+     Without them the take check skips lip sync and every clip gets the same timing shift, so
+     lip sync drifts; the Studio warns when they're missing.
    - Framing: insightface's buffalo_l face models (`det_10g.onnx`, `w600k_r50.onnx`, for
      non-commercial research use only) in `ComfyUI/models/insightface/models/buffalo_l/`. They run
      with onnxruntime (`pip install onnxruntime-gpu` with ComfyUI's Python). Without them the
