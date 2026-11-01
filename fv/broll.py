@@ -239,6 +239,14 @@ def kind_for(why: str, style: str) -> str:
     return "dance" if why == "instrumental gap" else "moment"  # mix
 
 
+def _for_engine(preset: str, text: str, frames: int, fps: float, drums: bool) -> str:
+    """A cutaway's prompt in its engine's structure (fv/prompts.py): nobody sings in it."""
+    from . import prompts
+    if formats.engine_of(preset) == "h3":
+        return prompts.h3(text, seconds=frames / float(fps), broll=True, sung=False, audio="drums" if drums else "")
+    return prompts.ltx25(text, sung=False)
+
+
 def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False):
     """Pick the slots, write the prompts, add the b-roll renders to the plan; returns the job
     graphs (stills first, then the LTX clips) to queue before assembly.
@@ -296,7 +304,8 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             # the drum stem under it (no vocal, so nobody starts singing)
             seek = round(t_start + p["song_t0"] - p.get("stems_t0", 0.0), 4)
             clips.append(graphs.ltx_render(preset=preset, fmt=fmt, key_path=key if stills else None,
-                                           prompt=motion, negative=NEGATIVE, frames=frames, seed=seed,
+                                           prompt=_for_engine(preset, motion, frames, rfps, os.path.exists(drums)),
+                                           negative=NEGATIVE, frames=frames, seed=seed,
                                            prefix=f"{rel}/r{rid:03d}R",
                                            audio_path=drums if os.path.exists(drums) else None,
                                            audio_seek=seek).nodes)
@@ -318,7 +327,8 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             # the drum stem drives the movement (no vocal, so nobody starts singing)
             seek = round(t_start + p["song_t0"] - p.get("stems_t0", 0.0), 4)
             clips.append(graphs.ltx_render(preset=preset, fmt=fmt, key_path=key if stills else None,
-                                           prompt=motion, negative=NEGATIVE, frames=frames, seed=seed,
+                                           prompt=_for_engine(preset, motion, frames, rfps, os.path.exists(drums)),
+                                           negative=NEGATIVE, frames=frames, seed=seed,
                                            prefix=f"{rel}/r{rid:03d}R",
                                            audio_path=drums if os.path.exists(drums) else None,
                                            audio_seek=seek).nodes)
@@ -329,7 +339,8 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
                                                   prefix=f"{rel}/k{rid:03d}R",
                                                   size1=s1, size2=s2).nodes)
             clips.append(graphs.ltx_render(preset=preset, fmt=fmt, key_path=key if stills else None,
-                                           prompt=period_background(img + STILL + MOTION, pera),
+                                           prompt=_for_engine(preset, period_background(img + STILL + MOTION, pera),
+                                                              frames, rfps, False),
                                            negative=NEGATIVE_EMPTY, frames=frames,
                                            seed=seed, prefix=f"{rel}/r{rid:03d}R").nodes)
         r = {"id": rid, "shot": s["index"], "role": "R", "performer": -1, "t_start": round(t_start, 4),

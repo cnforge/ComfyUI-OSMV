@@ -21,7 +21,9 @@ Everything runs locally in ComfyUI on open-weights models.
 4. Krea 2 paints a portrait of every performer, each one a different person.
 5. A vision check looks at every portrait (one person, the right gender, the whole head in frame,
    no writing, nothing from after the World's period, the right outfit) and redoes the wrong ones.
-6. LTX-2.3 turns each portrait into a clip that sings the isolated vocal. Over an instrumental
+6. The video engine turns each portrait into a clip that sings the isolated vocal: LTX-2.5
+   (the default), or MiniMax H3, which copies the vocal 1:1 and is told the sung words (Whisper
+   transcribes them). Each engine gets its prompts in its own structure. Over an instrumental
    stretch (an instrumental drop, a break) the singers don't sing: they move to the music with
    their mouths closed.
 7. A take check re-shoots missing, frozen or blown-out takes, dead mouths, takes that drift to
@@ -54,8 +56,8 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
    to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
    that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
-   Pick a length, a World (four examples, or write your own) and the output (format, quality,
-   frame rate and size: 24, 25, 30 or 50 fps; 720p to 4K, scaled up from the render). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
+   Pick a length, a World (four examples, or write your own) and the output (format, engine,
+   quality, frame rate and size: 24, 25, 30 or 50 fps; 720p to 4K, scaled up from the render). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
    close-ups only, crowd, cast order, seed), the take check's retries and the model versions.
    The project name is optional (the song's title otherwise). The buttons say how long the plan
    and the video will take.
@@ -176,7 +178,8 @@ Some things that help:
 |---|---|---|
 | Length and start | seconds (0 = the whole song); a start time, or auto | 30 s from the strongest stretch |
 | Format | 16:9 (1920×1080), 9:16 (1080×1920), 1:1 (1080×1080) | 16:9 |
-| Quality | quality (clips at 1280×768 for 16:9, 50 fps, three stages), fast (896×512, 25 fps, two stages with fewer steps; for checking the cast and the cut, lip sync is weaker) | quality |
+| Engine | ltx-2.5 (LTX-2.5 distilled, lip sync from the vocal), minimax-h3 (MiniMax H3 reference mode: the portrait, the vocal copied 1:1, the lyrics from Whisper; 24 fps, at least 4.5 s a clip; slower) | ltx-2.5 |
+| Quality | quality (LTX-2.5: clips at 1280×768 for 16:9, 25 fps; H3: 1344×768, 24 fps), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
 | Cast order | as written, mixed | as written |
@@ -186,9 +189,15 @@ Some things that help:
 | Seed | any number | 1 |
 | Models | auto, 24gb (fp8), full (bf16, 48 GB+ GPUs) | auto |
 
-Both are upscaled to 1080p (1920×1080, 1080×1920 or 1080×1080) and cut at 25 fps. Quality renders
-the clips at 50 fps, which gives the mouths smoother timing; 9:16 and 1:1 use the same sizes turned
-or squared (768×1280 and 1024×1024 at quality, 512×896 and 768×768 at fast).
+Both are upscaled to 1080p (1920×1080, 1080×1920 or 1080×1080) and cut at 25 fps. 9:16 and 1:1
+use the same sizes turned or squared (LTX-2.5: 768×1280 and 1024×1024 at quality, 512×896 and
+768×768 at fast; H3: 768×1344 and 768×768, 576×1024 and 640×640). Runs made before the engine
+choice rendered on LTX-2.3, which is retired; their re-cuts and re-shoots still work.
+
+MiniMax H3 needs ComfyUI's MiniMax H3 nodes (a recent ComfyUI), its reference model, the Qwen3-VL
+32B H3 text encoder and the H3 video and audio VAEs (`h3_*` in `fv/models.json`); its lyrics come
+from OpenAI Whisper (large-v3-turbo, about 1.6 GB, downloaded into `ComfyUI/models/whisper` the
+first time). The Studio lists any H3 files the chosen model set is missing.
 
 "To the music" cuts on the beat to a new face in the same spot: about every half bar on subtle,
 about every beat on intense.
@@ -214,7 +223,8 @@ about every beat on intense.
 3. Download a model set (see [Two model sets](#two-model-sets)): the 24 GB set for most cards,
    the full set if your GPU has 48 GB or more. Diffusion models go in `models/diffusion_models`,
    LoRAs in `models/loras`, text encoders in `models/text_encoders`, VAEs in `models/vae`, the
-   LTX-2.3 checkpoint in `models/checkpoints` and its upscaler in `models/latent_upscale_models`.
+   LTX-2.3 checkpoint (its Gemma 3 is the language model of the World and the vision check) in
+   `models/checkpoints` and the LTX-2.5 upscaler in `models/latent_upscale_models`.
    Sub-folders are fine: OneShot MV looks each file up by name. If you rename a file, change its
    name in `fv/models.json` (24 GB set) or `fv/models_full.json` (full set).
 4. Optional, but recommended, the checks:

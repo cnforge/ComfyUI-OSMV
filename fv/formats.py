@@ -16,32 +16,52 @@ FORMATS = {
     "9:16": {"quality": (768, 1280), "fast": (512, 896), "deliver": (1080, 1920)},
     "1:1": {"quality": (1024, 1024), "fast": (768, 768), "deliver": (1080, 1080)},
 }
-for _f in FORMATS.values():
-    _f["fast_voice"] = _f["fast"]  # singing at fast: the smaller size too
+# MiniMax H3 renders on its own 32-px canvas: 768 on the short side (its native size), or 576
+# at fast. Square stays 768 x 768 (H3 caps the area at 768 x 1344).
+_H3 = {"16:9": ((1344, 768), (1024, 576)), "9:16": ((768, 1344), (576, 1024)), "1:1": ((768, 768), (640, 640))}
+for _k, _f in FORMATS.items():
+    _f["fast_voice"] = _f["fast"]  # older runs' singing-at-fast preset
+    _f["h3"], _f["h3_fast"] = _H3[_k]
 FORMAT_NAMES = list(FORMATS)  # 16:9 first: the default
 
 PRESETS = {
-    # quality = the 3-stage LTX-2.3 lip-sync schedule (engine "ltx23_r8"): LTX-2.3 22B dev +
-    # distilled LoRA 0.45, three stages (1/4 -> 1/2 -> full), 50 fps.
-    # sync_delay: LTX lip movements lead their audio; measured -0.22 s and -0.26 s (peak
-    # mouth/vocal cross-correlation over 38 clips in two runs). Lips naturally open ~60-80 ms before the
-    # sound, so the clips are shown 0.16 s later to land on the beat of the syllable.
-    "quality": {"stages": 3, "fps": 50, "engine": "ltx23_r8", "sync_delay": 0.16},
-    # fast = LTX-2.5 22B distilled, two stages (1/2 -> full), 25 fps.
-    # fast: LTX-2.5 lips lead by only ~0.12 s (peak over 11 clips), so a small nudge
+    # LTX-2.5 22B distilled, two stages (1/2 -> full), 25 fps: quality at the full size, fast at
+    # the smaller one. LTX-2.5 lips lead their audio by only ~0.12 s (peak over 11 clips), so a
+    # small nudge; Take QC measures each take with SyncNet and uses its own offset where it can.
+    "quality": {"stages": 2, "fps": 25, "engine": "ltx25_distilled", "sync_delay": 0.05},
     "fast": {"stages": 2, "fps": 25, "engine": "ltx25_distilled", "sync_delay": 0.05},
-    # fast for singing: LTX-2.5's lip sync scores lower under SyncNet, so voice runs at "fast"
-    # keep the quality model (LTX-2.3 and its LoRAs) at the fast size: two stages (1/2 -> full,
-    # the second with the quality schedule's last 3 steps), 25 fps, 20 first-stage steps
-    "fast_voice": {"stages": 2, "fps": 25, "engine": "ltx23_r8", "sync_delay": 0.16, "steps1": 20,
-                   "key_strengths": (0.7, 0.8)},
+    # MiniMax H3 (fv/h3.py): one pass of the 8-step reference model at 24 fps, the clip's vocal
+    # copied 1:1 as its soundtrack. Its lip offset isn't known yet: SyncNet measures every take.
+    "h3": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0},
+    "h3_fast": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0},
+    # older runs (LTX-2.3, retired): only their assembly and re-shoots read these
+    "fast_voice": {"stages": 2, "fps": 25, "engine": "ltx25_distilled", "sync_delay": 0.16},
 }
-PRESET_NAMES = ["quality", "fast"]  # what users pick; fast_voice is chosen for voice + fast
+LEGACY_SYNC = {"quality": 0.16, "fast_voice": 0.16}  # LTX-2.3's lips led by 0.22-0.26 s
+ENGINES = {"ltx25": "LTX-2.5", "h3": "MiniMax H3"}
+PRESET_NAMES = ["quality", "fast"]  # what users pick; with the engine they make the render preset
 
 
-def effective_preset(mode: str, preset: str) -> str:
-    """Singing shots always use the quality model (fast_voice), motion keeps LTX-2.5 at fast."""
-    return "fast_voice" if (mode == "voice" and preset == "fast") else preset
+def effective_preset(mode: str, preset: str, engine: str = "ltx25") -> str:
+    """The render preset for a speed (quality / fast) on an engine (ltx25 / h3). Motion runs
+    (pose-guided dance clips) stay on LTX-2.5."""
+    if engine == "h3" and mode == "voice":
+        return "h3" if preset == "quality" else "h3_fast"
+    return preset if preset in ("quality", "fast") else "quality"
+
+
+def engine_of(preset: str) -> str:
+    return "h3" if PRESETS.get(preset, {}).get("engine") == "h3" else "ltx25"
+
+
+def base_sync_delay(plan: dict) -> float:
+    """The cut's lip-sync shift for clips without a measured one (runs made before the engine
+    choice rendered on LTX-2.3, whose lips led by more)."""
+    if "sync_delay" in plan:
+        return float(plan["sync_delay"])
+    if "engine" not in plan and plan.get("preset") in LEGACY_SYNC:
+        return LEGACY_SYNC[plan["preset"]]
+    return float(PRESETS.get(plan.get("preset"), {}).get("sync_delay", 0.0))
 
 
 def render_size(fmt: str, preset: str) -> tuple[int, int]:
@@ -53,7 +73,7 @@ def stage_sizes(fmt: str, preset: str) -> list[tuple[int, int]]:
     w, h = render_size(fmt, preset)
     n = PRESETS[preset]["stages"]
     out = [(w >> (n - 1 - i), h >> (n - 1 - i)) for i in range(n)]
-    for (sw, sh) in out[:1]:
+    for (sw, sh) in out[:1] if PRESETS[preset]["engine"] != "h3" else []:
         assert sw % 64 == 0 and sh % 64 == 0, f"stage-1 size {sw}x{sh} not a multiple of 64"
     return out
 
@@ -82,9 +102,17 @@ def deliver_crop(fmt: str, preset: str) -> tuple[int, int, int, int]:
     return 0, (rh - h) // 2, rw, h
 
 
+H3_FPS = 24
+H3_MIN_FRAMES = 107  # 17k+5 frames at 24 fps: 4.46 s, H3's shortest reliable clip (4-15 s)
+
+
 def ltx_frames(seconds: float, fps: float) -> int:
-    """Smallest LTX-valid frame count (8k+1) covering `seconds`."""
+    """Smallest valid frame count covering `seconds`: 8k+1 for LTX; for MiniMax H3 (the only
+    engine at 24 fps) 17k+5 and at least H3_MIN_FRAMES (a shorter shot uses the clip's start)."""
     n = max(1, int(math.ceil(seconds * fps - 1e-6)))
+    if int(round(fps)) == H3_FPS:
+        n = max(n, H3_MIN_FRAMES)
+        return n + (5 - n % 17) % 17
     return 8 * max(1, math.ceil((n - 1) / 8)) + 1
 
 

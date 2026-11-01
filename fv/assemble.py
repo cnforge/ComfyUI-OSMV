@@ -191,7 +191,7 @@ def assemble(run_dir: str, *, fx_intensity: float = 1.0, do_finish: bool = True,
     # ---- the cut: re-derived from the shots with the pack's current edit settings, so a
     # re-assemble picks up edit changes without re-rendering
     # lip-sync offset: LTX's mouths lead its audio slightly; show each clip `delay` seconds later
-    delay = float(plan.get("sync_delay", formats.PRESETS.get(plan["preset"], {}).get("sync_delay", 0.0)))
+    delay = formats.base_sync_delay(plan)
     if plan.get("mode") == "voice" and plan.get("shots") and not plan.get("edl_locked"):
         from . import plan as planner
         faces = None

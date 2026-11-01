@@ -66,8 +66,10 @@ def _resolve_models(m: dict, idx=None) -> tuple[dict, list]:
 # ---- model sets: "24gb" (models.json, fp8, the default) and "full" (models_full.json on top, bf16)
 MODEL_SETS = ("24gb", "full")
 FULL_MIN_GB = 46          # the full set wants a 48 GB card or bigger
-RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", "ltx23_ckpt", "ltx23_te",
-            "ltx23_upscaler", "ltx23_loras", "ltx_union_lora")  # what a default voice run loads (looks too)
+RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", "ltx25_unet", "ltx25_vae",
+            "ltx25_audio_vae", "ltx25_te", "ltx25_upscaler", "ltx_union_lora",  # what a default voice run loads (looks too)
+            "ltx23_ckpt", "ltx23_te")  # LTX-2.3's Gemma 3: the language model of the vision check and the World
+H3_KEYS = ("h3_unet", "h3_te", "h3_vae", "h3_audio_vae")  # the singer clips on MiniMax H3
 ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
                "klein_unet", "klein_te", "klein_vae")      # and its looks
 
@@ -135,12 +137,17 @@ def missing_nodes() -> list:
     return sorted({p for n, p in RUN_NODES.items() if n not in comfy_nodes.NODE_CLASS_MAPPINGS})
 
 
-def not_ready(requested: str | None = "auto", artist: bool = False) -> str:
-    """Why a render with this model set (and a character photo) can't run here ('' when it can)."""
+def not_ready(requested: str | None = "auto", artist: bool = False, engine: str = "ltx25") -> str:
+    """Why a render with this model set (and a character photo, and an engine) can't run here
+    ('' when it can)."""
     name = pick_models(requested)
     files, packs = missing_files(name), missing_nodes()
     if artist:
         files += missing_files(name, keys=ARTIST_KEYS)
+    if engine == "h3":
+        files += missing_files(name, keys=H3_KEYS)
+        if not _has_node("MiniMaxH3ReferenceToVideo"):
+            packs = packs + ["ComfyUI's MiniMax H3 nodes (update ComfyUI)"]
     why = []
     if files:
         why.append(f"{'a character run' if artist else 'the ' + ('full' if name == 'full' else '24 GB') + ' model set'}"
@@ -159,6 +166,7 @@ def models_report() -> dict:
             "auto": pick_models("auto"), "full_min_gb": FULL_MIN_GB,
             "missing": {n: missing_files(n, idx) for n in MODEL_SETS}, "missing_packs": missing_nodes(),
             "missing_character": missing_files("24gb", idx, ARTIST_KEYS),  # the same files in both sets
+            "missing_h3": {n: missing_files(n, idx, H3_KEYS) for n in MODEL_SETS},
             "missing_checks": missing_checks()}
 
 
@@ -366,6 +374,10 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     stage (a look group: one clip that switches person on the beat, each look's keyframe pinned
     at its cut frame; continuity=False, since the clip is meant to change person)."""
     pr = formats.PRESETS[preset]
+    if pr["engine"] == "h3":  # the same call renders on MiniMax H3 (its prompt written for it)
+        return h3_render(preset=preset, fmt=fmt, key_path=key_path, prompt=prompt, frames=frames, seed=seed,
+                         prefix=prefix, audio_path=audio_path, audio_seek=audio_seek, guide_video=guide_video,
+                         guide_start=guide_start)
     fps = pr["fps"]
     sizes = formats.stage_sizes(fmt, preset)
     g = Graph()
@@ -463,6 +475,64 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     t_size = min(512, (frames + 7) // 8 * 8 + 8)
     dec = g.add("VAEDecodeTiled", samples=vlat, vae=m["vae"], tile_size=512, overlap=64,
                 temporal_size=t_size, temporal_overlap=8)
+    _save_video(g, O(dec), fps, prefix, audio=au)
+    return g
+
+
+# ------------------------------------------------------------------ MiniMax H3
+H3_STEPS = 8          # the fast omni-reference model's schedule
+H3_SHIFT = (12.0, 3.0)  # ModelSamplingMiniMaxH3: video, audio
+
+
+def _h3(g):
+    unet = g.add("UNETLoader", unet_name=M["h3_unet"], weight_dtype="default")
+    model = O(g.add("MiniMaxH3SigmaShift", model=_ram_backups(g, O(unet)), shift_video=H3_SHIFT[0],
+                    shift_audio=H3_SHIFT[1]))
+    clip = g.add("CLIPLoader", clip_name=M["h3_te"], type="minimax", device="default")
+    vae = g.add("VAELoader", vae_name=M["h3_vae"])
+    avae = g.add("VAELoader", vae_name=M["h3_audio_vae"])
+    return dict(model=model, clip=O(clip), vae=O(vae), avae=O(avae))
+
+
+def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path=None, audio_seek=0.0,
+              guide_video=None, guide_start=0.0):
+    """One MiniMax H3 clip in reference mode (fv/h3.py writes its prompt): <Picture 1> the
+    keyframe, also pinned as the first frame; <Audio 1> the clip's vocal, copied 1:1 and pinned
+    at frame 0 so the mouth lands on it; <Video 1> (a look) the lead's clip, for the pose. The
+    take is saved with the original vocal, like an LTX clip."""
+    fps = formats.H3_FPS
+    w, h = formats.render_size(fmt, preset)
+    g = Graph()
+    m = _h3(g)
+    refs = {}
+    key = None
+    if key_path:
+        key = g.add("FVLoadImagePath", path=key_path)
+        refs["ref_images.ref_image_0"] = O(key)
+    au = None
+    if audio_path:
+        au = O(g.add("FVLoadAudioPath", path=audio_path, seek_seconds=max(0.0, float(audio_seek)),
+                     duration=round(frames / float(fps), 4)))
+        refs["ref_audios.ref_audio_0"] = au
+    if guide_video:
+        vid = g.add("FVLoadVideoPath", path=guide_video, width=w, height=h, frame_cap=frames,
+                    start_seconds=float(guide_start), force_fps=float(fps))
+        refs["ref_videos.ref_video_0"] = O(vid)
+    r2v = g.add("MiniMaxH3ReferenceToVideo", clip=m["clip"], vae=m["vae"], audio_vae=m["avae"], prompt=prompt,
+                width=w, height=h, length=int(frames), ref_image_size="match", **refs)
+    pos, lat = O(r2v, 0), O(r2v, 1)
+    if key is not None or au is not None:
+        kw = {"image": O(key), "vae": m["vae"]} if key is not None else {}
+        if au is not None:
+            kw.update(audio=au, audio_vae=m["avae"])
+        pos = O(g.add("MiniMaxH3AddGuide", positive=pos, latent=lat, frame_idx=0, **kw))
+    guider = g.add("BasicGuider", model=m["model"], conditioning=pos)
+    sig = g.add("BasicScheduler", model=m["model"], scheduler="beta", steps=H3_STEPS, denoise=1.0)
+    s = g.add("SamplerCustomAdvanced", noise=O(g.add("RandomNoise", noise_seed=seed)), guider=O(guider),
+              sampler=O(g.add("KSamplerSelect", sampler_name="euler")), sigmas=O(sig), latent_image=lat)
+    dec = g.add("VAEDecode", samples=O(s), vae=m["vae"])
+    if au is None:  # no vocal (b-roll): keep H3's own sound
+        au = O(g.add("VAEDecodeAudio", samples=O(s), vae=m["avae"]))
     _save_video(g, O(dec), fps, prefix, audio=au)
     return g
 
@@ -578,11 +648,15 @@ def assemble(*, run_dir, prefix):
 
 
 def keep_ltx(g, preset="quality"):
-    """Wire LTX's loaders into an FVKeep node of graph g, so a job that doesn't use LTX (a QC
-    pass, a Klein edit) keeps it loaded for the next video job instead of a reload from disk."""
+    """Wire the video model's loaders into an FVKeep node of graph g, so a job that doesn't use it
+    (a QC pass, a Klein edit) keeps it loaded for the next video job instead of a reload from disk."""
     if not _has_node("FVKeep"):
         return g
     pr = formats.PRESETS.get(preset, formats.PRESETS["quality"])
+    if pr["engine"] == "h3":
+        m = _h3(g)
+        g.add("FVKeep", model=m["model"], clip=m["clip"], vae=m["vae"], audio_vae=m["avae"])
+        return g
     m = _ltx23(g) if pr["engine"] == "ltx23_r8" else _ltx25(g)
     g.add("FVKeep", model=m["model"], clip=m["clip"], vae=m["vae"], audio_vae=m["avae"], upscaler=m["ups"])
     return g

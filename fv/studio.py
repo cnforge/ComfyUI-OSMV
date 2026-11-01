@@ -389,6 +389,10 @@ def _characters(b: dict) -> list:
     return [x for x in c if x][:8] if isinstance(c, list) else ([b["character"]] if b.get("character") else [])
 
 
+def _engine(b: dict) -> str:
+    return "h3" if b.get("engine") == "h3" else "ltx25"
+
+
 def _director_graph(b: dict) -> dict:
     cuts = {k: b.get(k) for k in ("cuts_low", "cuts_medium", "cuts_high") if b.get(k)}
     d = {"audio": ["1", 0], "mode": "voice", "pack": "crowd", "format": b.get("format", "16:9"),
@@ -404,6 +408,8 @@ def _director_graph(b: dict) -> dict:
          "crowd": b.get("crowd", "auto"), **cuts}
     if b.get("models") in ("auto", "24gb", "full") and _director_has("models"):
         d["models"] = b["models"]
+    if _director_has("engine"):  # the singer clips' video model (an older node renders LTX only)
+        d["engine"] = "minimax-h3" if _engine(b) == "h3" else "ltx-2.5"
     fps, res = _output(b)
     if _director_has("fps"):  # an older node gets these from the plan when it is done (_job)
         d["fps"], d["resolution"] = str(fps), str(res)
@@ -568,7 +574,7 @@ def _notes(d: str, p: dict, label_of: dict, done: bool = False) -> list[dict]:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = 2.0 if p.get("preset") == "quality" else 1.0
+    per = {"quality": 2.0, "h3": 3.0, "h3_fast": 2.0}.get(p.get("preset"), 1.0)
     return 6 + per * dur
 
 
@@ -774,6 +780,12 @@ def _with_note(g: dict, note: str) -> None:
                     t = re.sub(r"\b(in (?:his|her|their)) (?:twenties|thirties|forties|fifties|sixties|seventies|eighties|nineties)\b",
                                lambda m: f"{m.group(1)} {dec}", t)
             ins["text"] = director._insert_fix(t, note[0].upper() + note[1:])
+    for n in g.values():  # a MiniMax H3 clip: the note opens its shot description (fv/prompts.py)
+        ins = n.get("inputs") or {}
+        if n.get("class_type") == "MiniMaxH3ReferenceToVideo" and isinstance(ins.get("prompt"), str):
+            mark = "the shot is exactly <Picture 1>. "
+            if mark in ins["prompt"]:
+                ins["prompt"] = ins["prompt"].replace(mark, mark + note[0].upper() + note[1:] + " ", 1)
 
 
 def _set_prefix(g: dict, cls: str, prefix: str) -> None:
@@ -870,7 +882,7 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
     k = len(p.get("pickups") or []) + 1
     shots = {s["index"]: s for s in p.get("shots", [])}
     stills, clips, changes = [], [], []
-    delay0 = float(formats.PRESETS.get(p.get("preset", "quality"), {}).get("sync_delay", 0.0))
+    delay0 = formats.base_sync_delay(p)
     for i, it in enumerate(items):
         idx = int(it.get("n", 0)) - 1
         mode = "recast" if it.get("mode") == "recast" else "take"
@@ -942,7 +954,9 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
                 if c == "FVLoadImagePath":
                     out["image"] = ins.get("path")
                     out["image_exists"] = os.path.exists(ins.get("path", ""))
-            out["positive"] = [str(g[k]["inputs"].get("text", ""))[:260] for k in _positive(g)]
+            out["positive"] = [str(g[k]["inputs"].get("text", ""))[:260] for k in _positive(g)] or \
+                [str(n["inputs"].get("prompt", ""))[:260] for n in g.values()
+                 if n.get("class_type") == "MiniMaxH3ReferenceToVideo"]
             return out
         return {"dry": True, "pickup": k, "stills": [show(g) for g in stills], "clips": [show(g) for g in clips],
                 "changes": changes}
@@ -1318,9 +1332,13 @@ async def _api(request: web.Request, route: str) -> web.Response:
             _input_path(body["song"])
             for x in _characters(body):
                 _input_path(x, "photo")
+            if _engine(body) == "h3" and not _director_has("engine"):  # it would plan on LTX-2.5 instead
+                return web.json_response({"error": "Restart ComfyUI to use MiniMax H3: the Director node it has "
+                                                   "loaded predates the engine choice."}, status=400)
             if body.get("render"):  # refuse now, not after minutes of planning
                 why = await _blocking(lambda: _fv("graphs").not_ready(body.get("models") or "auto",
-                                                                      artist=bool(_characters(body))))
+                                                                      artist=bool(_characters(body)),
+                                                                      engine=_engine(body)))
                 if why:
                     return web.json_response({"error": f"Can't render on this ComfyUI yet: {why}."}, status=400)
             try:

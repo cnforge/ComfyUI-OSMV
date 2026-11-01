@@ -511,7 +511,7 @@ const CUTS = [["every 2 bars","Slow: every 2 bars"],["every bar","Steady: every 
 const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
-  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080};
+  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25"};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -672,7 +672,9 @@ function overlayProgress(elapsed, left){
 }
 const gpuName = g => String(g || "").replace(/^NVIDIA\s+/i, "").replace(/\s+(Blackwell\s+)?(Workstation|Server|Max-Q)(\s+Edition)?$/i, "").replace(/\s+Laptop GPU$/i, "").trim();
 const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; const m = Math.round(s / 60); return mins(m); };
-function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30); return 6 + (b.preset === "quality" ? 2 : 1) * sec; }
+// minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
+function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
+  const per = b.engine === "h3" ? (b.preset === "quality" ? 3 : 2) : (b.preset === "quality" ? 2 : 1); return 6 + per * sec; }
 function saveBrief(){ store.set("brief", S.brief); }
 // the project name: saved with the run (studio.json); in demo mode the brief's name stands in
 const projectOf = r => (r && r.project) || (DEMO && r ? ((store.get("briefs", {})[r.run] || {}).name || "") : "");
@@ -764,6 +766,7 @@ async function viewBrief(){
     <section class="card">
       <h2 class="side-h">Output</h2>
       <div class="grid3" role="group" aria-label="Format" id="fmts"></div>
+      <div class="orow outrow"><span>Engine</span><div class="seg mini" role="group" aria-label="Video engine" id="engs"></div></div>
       <div class="stack" role="group" aria-label="Quality" id="tiers" style="margin-top:14px"></div>
       <div class="orow outrow"><span>Frame rate</span><div class="seg mini" role="group" aria-label="Frame rate" id="fpss"></div></div>
       <div class="orow outrow"><span>Size</span><div class="seg mini" role="group" aria-label="Size" id="ress"></div></div>
@@ -826,22 +829,32 @@ async function viewBrief(){
     $("#fmts").querySelectorAll(".fmt").forEach(el => el.onclick = () => { b.format = el.dataset.f; saveBrief(); drawFmt(); drawTiers(); });
   };
   // the clips' render size per format (fv/formats.py); both presets are upscaled to the delivery size
-  const RSIZE = {quality: {"16:9": "1280×768", "9:16": "768×1280", "1:1": "1024×1024"},
-                 fast: {"16:9": "896×512", "9:16": "512×896", "1:1": "768×768"}};
+  const RSIZE = {ltx25: {quality: {"16:9": "1280×768", "9:16": "768×1280", "1:1": "1024×1024"},
+                         fast: {"16:9": "896×512", "9:16": "512×896", "1:1": "768×768"}},
+                 h3: {quality: {"16:9": "1344×768", "9:16": "768×1344", "1:1": "768×768"},
+                      fast: {"16:9": "1024×576", "9:16": "576×1024", "1:1": "640×640"}}};
+  const ENGINES = [["ltx25", "LTX-2.5"], ["h3", "MiniMax H3"]];
   // the delivery size: the format's shape with the chosen short side (fv/formats.py deliver_size)
   const RES = [[720, "720p"], [1080, "1080p"], [1440, "1440p"], [2160, "4K"]];
   const dsize = f => { const r = +b.resolution || 1080, [w, h] = {"16:9": [16, 9], "9:16": [9, 16], "1:1": [1, 1]}[f];
     const k = r / Math.min(w, h), ev = x => Math.round(x * k / 2) * 2; return `${ev(w)}×${ev(h)}`; };
   const drawTiers = () => {
-    const f = RSIZE.quality[b.format] ? b.format : "16:9";
-    const t = [["quality","Quality",RSIZE.quality[f],"50 fps clips: the sharpest detail and the best lip sync."],
-               ["fast","Fast",RSIZE.fast[f],"Smaller 25 fps clips in fewer steps. For checking the cast and the cut; lip sync is weaker."]];
+    const eng = b.engine === "h3" ? "h3" : "ltx25", rs = RSIZE[eng];
+    $("#engs").innerHTML = ENGINES.map(([k, n]) => `<button type="button" class="opt" data-v="${k}" aria-pressed="${eng === k}">${n}</button>`).join("");
+    $("#engs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.engine = el.dataset.v; saveBrief(); drawTiers(); if (S.models) drawModels(); });
+    const f = rs.quality[b.format] ? b.format : "16:9";
+    const t = eng === "h3"
+      ? [["quality","Quality",rs.quality[f],"MiniMax H3 at its native size, 24 fps: your vocal copied 1:1, the lyrics in every prompt. The slowest."],
+         ["fast","Fast",rs.fast[f],"H3 at a smaller size, for checking the cast and the cut."]]
+      : [["quality","Quality",rs.quality[f],"LTX-2.5 at the full size, 25 fps clips lip-synced to your vocal."],
+         ["fast","Fast",rs.fast[f],"LTX-2.5 at a smaller size, for checking the cast and the cut."]];
     $("#tiers").innerHTML = t.map(x => { const e = estimate(Object.assign({}, b, {preset:x[0]})); return `<button type="button" class="tier" data-q="${x[0]}" aria-pressed="${b.preset===x[0]}"><span class="t"><span><b>${x[1]}</b><span class="mono muted" style="font-size:12px;margin-left:8px">${x[2]}</span></span><span class="eta">≈ ${mins(e)}</span></span><small>${x[3]}</small></button>`; }).join("");
     $("#tiers").querySelectorAll(".tier").forEach(el => el.onclick = () => { b.preset = el.dataset.q; saveBrief(); drawTiers(); });
     const sec = +b.seconds > 0 ? b.seconds + " s" : "the whole song";
     const fps = +b.fps || 25;
-    const motion = fps === 50 && b.preset === "fast" ? " Fast clips are 25 fps, so 50 repeats every frame."
-      : fps === 24 || fps === 30 ? ` ${fps} fps now and then repeats a frame of the 50 fps clips; 25 and 50 are the smoothest.` : "";
+    const native = eng === "h3" ? 24 : 25;  // the clips' own frame rate
+    const motion = fps === native ? "" : fps === 2 * native ? ` The clips are ${native} fps, so ${fps} shows every frame twice.`
+      : ` The clips are ${native} fps, so ${fps} now and then ${fps > native ? "repeats" : "drops"} a frame; ${native} is the smoothest.`;
     const big = (+b.resolution || 1080) > 1080 ? " Above 1080p the clips are scaled up: bigger files, not more detail." : "";
     $("#etanote").textContent = `${dsize(f)} at ${fps} fps.${motion}${big} Times are a rough guide for ${sec}${S.sys && S.sys.gpu ? " on " + gpuName(S.sys.gpu) : ""}.`;
     $("#fpss").innerHTML = [24, 25, 30, 50].map(x => `<button type="button" class="opt" data-v="${x}" aria-pressed="${fps === x}">${x}</button>`).join("");
@@ -862,7 +875,7 @@ async function viewBrief(){
     let t = r.vram_gb ? `${gpu}${Math.round(r.vram_gb)} GB${r.reserved_gb >= 1 ? ` usable (${Math.round(r.reserved_gb)} GB reserved)` : ""}: ` : "";
     t += cur === "auto" ? `Auto uses the ${name}.` : `Uses the ${name}.`;
     if (use === "full" && r.vram_gb && r.vram_gb < r.full_min_gb) t += " The full models want 48 GB or more, so this may be slow or run out of memory.";
-    const miss = (r.missing || {})[use] || [];
+    const miss = [...((r.missing || {})[use] || []), ...(b.engine === "h3" ? ((r.missing_h3 || {})[use] || []) : [])];
     if (miss.length) t += ` Missing ${miss.length === 1 ? "one file" : miss.length + " files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`;
     const packs = r.missing_packs || [];
     if (packs.length) t += ` ${packs.join(", ")} didn't load in ComfyUI (look for IMPORT FAILED in its console), so nothing can render.`;

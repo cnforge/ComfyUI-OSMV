@@ -299,6 +299,11 @@ class FVDirector:
                        "tooltip": "Which model files to use. 24gb: the fp8 set (models.json), made for 24 GB GPUs. "
                                   "full: the bf16 set (models_full.json), for 48 GB or more. auto: the full set on "
                                   "a 48 GB+ GPU when its files are installed, otherwise the 24 GB set."}),
+            "engine": (["ltx-2.5", "minimax-h3"], {"default": "ltx-2.5",
+                       "tooltip": "The video model of the singer clips. ltx-2.5: LTX-2.5 distilled, lip sync from "
+                                  "the vocal. minimax-h3: MiniMax H3 in reference mode (the portrait, the vocal "
+                                  "copied 1:1, the lyrics transcribed with Whisper), 24 fps, at least 4.5 s a clip; "
+                                  "slower. Each engine gets prompts in its own structure."}),
         }}
 
     RETURN_TYPES = ("STRING", "STRING")
@@ -315,7 +320,7 @@ class FVDirector:
             dance_video_path="", run_name="", twin_editor="klein", guide_strength=1.0, queue_assemble=True,
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
-            cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080"):
+            cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5"):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -334,7 +339,8 @@ class FVDirector:
                               cuts={"low": cuts_low, "medium": cuts_medium, "high": cuts_high},
                               audio_fx=audio_fx or "", cast_order=cast_order or "as written",
                               crowd=crowd or "auto", models=models or "auto",
-                              fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080))
+                              fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080),
+                              engine="h3" if engine == "minimax-h3" else "ltx25")
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}

@@ -149,7 +149,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
            broll_style: str = "mix", staged: bool = True,
            look_groups: bool = False, cuts: dict | None = None, audio_fx: str = "",
            cast_order: str = "as written", crowd: str = "auto", log=print, fps: float = 0.0, resolution: int = 1080,
-           lip_repair: bool = False, models: str = "auto") -> dict:  # lip_repair: accepted and ignored, so older callers
+           lip_repair: bool = False, models: str = "auto", engine: str = "ltx25") -> dict:  # lip_repair: accepted and ignored, so older callers
     # (an old nodes.py still loaded in a ComfyUI that has not restarted) still work
     """staged (voice runs queued here, with QC): the 4-load order. Krea makes every portrait and
     the b-roll candidate stills; LTX makes every singer clip and the b-roll clips, and QC
@@ -194,7 +194,10 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     tl = beat.analyze(audio, sr)
     pk = casting.load_pack(pack)
     label = preset
-    preset = formats.effective_preset(mode, preset)  # singing always renders on the quality model
+    engine = engine if engine in formats.ENGINES else "ltx25"
+    preset = formats.effective_preset(mode, preset, engine)  # the speed on the chosen engine
+    if formats.engine_of(preset) == "h3":
+        look_groups = False  # a look group is an LTX trick (keyframes pinned in one clip)
     if mode == "voice" and artist_path and pack != "artist":
         pk = casting.load_pack("artist")
         pack = "artist"
@@ -255,6 +258,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         p["dance_path"] = dance_path
     if resolution and resolution in formats.RESOLUTIONS:
         p["resolution"] = int(resolution)
+    p["engine"] = formats.engine_of(preset)
     log(f"[OneShotMV] {mode} plan: {len(p['renders'])} renders, window {p['song_t0']:.2f}-{p['song_t1']:.2f}s, "
         f"tempo {p['tempo']}")
 
@@ -345,7 +349,14 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
         by_id = {r["id"]: r for r in p["renders"]}
         for r in p["renders"]:
             r["path"] = os.path.join(run_dir, f"r{r['id']:03d}{r['role']}_00001_.mp4")
-        sing_for = {r["id"]: _sing(cast[r["performer"]]["sing"], r, dense_from) for r in p["renders"] if r["role"] == "A"}
+        if p["engine"] == "h3":  # H3 spells out the sung words (fv/lyrics.py)
+            try:
+                from . import lyrics
+                lyrics.transcribe(run_dir, vocal_path, t0=p["song_t0"] - p.get("stems_t0", 0.0), log=log)
+            except Exception as e:  # without them H3 still sings along to the vocal
+                log(f"[OneShotMV] lyrics skipped ({e})")
+        sing_for = {r["id"]: _clip_prompt(p, run_dir, r, _sing(cast[r["performer"]]["sing"], r, dense_from), r)
+                    for r in p["renders"] if r["role"] == "A"}
         for r in p["renders"]:  # a look sings (or not) with its lead
             if r["role"] == "B" and by_id[r["twin_of"]].get("instrumental"):
                 r["instrumental"] = True
@@ -393,7 +404,8 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
             a = by_id[r["twin_of"]]
             c = cast[r["performer"]]
             jobs.append((f"r{r['id']:03d}B", graphs.ltx_render(
-                preset=preset, fmt=fmt, key_path=r["key"], prompt=_sing(c["sing"], a, dense_from), negative=_neg(neg, a),
+                preset=preset, fmt=fmt, key_path=r["key"], prompt=_clip_prompt(p, run_dir, r, _sing(c["sing"], a, dense_from), a, look=True),
+                negative=_neg(neg, a),
                 frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}B",
                 audio_path=vocal_path, audio_seek=seek(r), guide_video=a["path"],
                 guide_start=r.get("guide_start", 0.0), guide_strength=guide_strength, guide_face=True).nodes))
@@ -711,6 +723,26 @@ def _sing(text: str, lead: dict, dense_from: float) -> str:
     return casting.articulate(text) if lead.get("vocal_density", 0.0) >= dense_from else text
 
 
+def _clip_prompt(p: dict, run_dir: str, r: dict, text: str, lead: dict, look: bool = False) -> str:
+    """A singer clip's prompt in its engine's structure (fv/prompts.py): LTX-2.5's paragraph, or
+    H3's reference sections with the words sung in the clip (fv/lyrics.py)."""
+    from . import prompts
+    sung = not lead.get("instrumental")
+    if formats.engine_of(p.get("preset", "")) != "h3":
+        return prompts.ltx25(text, sung=sung)
+    lyr = None
+    try:
+        lp = os.path.join(run_dir, "lyrics.json")
+        lyr = json.load(open(lp, encoding="utf-8")) if os.path.exists(lp) else None
+    except Exception:
+        pass
+    from . import lyrics
+    secs = r["frames"] / float(r["fps"])
+    words = lyrics.between(lyr, r["t_start"], r["t_start"] + secs) if sung else ""
+    return prompts.h3(text, seconds=secs, words=words, language=(lyr or {}).get("language", "English"),
+                      sung=sung, look=look)
+
+
 def _neg(neg: str, lead: dict) -> str:
     return casting.instrumental_negative(neg) if lead.get("instrumental") else neg
 
@@ -864,7 +896,8 @@ def _fallback_looks(p: dict, run_dir: str, log=print) -> tuple[list[dict], list[
         json.dump(kg, open(os.path.join(run_dir, "jobs", f"fb_{name}.json"), "w", encoding="utf-8"), indent=1)
         key = os.path.join(run_dir, f"{name}_00001_.png")
         c = cast[r["performer"]]
-        rg = graphs.ltx_render(preset=p["preset"], fmt=p["format"], key_path=key, prompt=_sing(c["sing"], a, dense_from),
+        rg = graphs.ltx_render(preset=p["preset"], fmt=p["format"], key_path=key,
+                               prompt=_clip_prompt(p, run_dir, r, _sing(c["sing"], a, dense_from), a, look=True),
                                negative=gs["neg"],
                                frames=r["frames"], seed=c["seed"], prefix=f"{rel}/r{r['id']:03d}B",
                                audio_path=vp, audio_seek=round(r["t_start"] + p["song_t0"] - p.get("stems_t0", 0.0), 4),
