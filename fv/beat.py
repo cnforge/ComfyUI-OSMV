@@ -528,6 +528,18 @@ def choose_window(tl: dict, length_s: float, drop_at: float = 0.4, start: float 
         cands = sorted({max(0.0, x["start"]) for x in secs}) or [0.0]
         s = max(cands, key=lambda a: (round(mean_energy(a), 2), -a))
     bars = tl.get("downbeats") or [0.0]
+    picked = start is not None and start >= 0
+    if picked:
+        # a start the user picked (the Studio's dragged box): the nearest bar line, and the
+        # length kept (its end on the bar line nearest to start + length, not a phrase line),
+        # so the box lands where it was dropped instead of jumping back a bar and resizing
+        s = min([0.0] + list(bars), key=lambda b: abs(b - s))  # or the song's very start
+        s = max(0.0, min(s, max(0.0, dur - length_s)))
+        later = [b for b in bars if b > s + 0.5 * length_s]
+        e = min(later, key=lambda b: abs(b - (s + length_s))) if later else s + length_s
+        if abs(e - (s + length_s)) > 30.0 / max(float(tl.get("tempo") or 120.0), 1.0) * 4:
+            e = s + length_s  # no bar line near the end (a sparse grid): the length as asked
+        return round(s, 4), round(min(dur, e), 4)
     # snap to the bar line at or before s (a start within half a beat of a bar line counts
     # as that bar, so a typed start like 7.48 for a bar at 7.49 isn't pushed a bar back)
     tol = 30.0 / max(float(tl.get("tempo") or 120.0), 1.0)

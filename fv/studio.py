@@ -205,7 +205,8 @@ def _analysis(path: str) -> dict:
 
 
 def _analyze(name: str, seconds: float, start: float) -> dict:
-    from . import plan as planner
+    _fv("beat")  # the window rules live there (reloaded in place, so plan sees the edit)
+    planner = _fv("plan")
     path = _input_path(name)
     a = _analysis(path)
     tl = a["tl"]
