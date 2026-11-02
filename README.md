@@ -56,8 +56,10 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
    to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
    that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
-   Pick a length, a World (four examples, or write your own) and the output (format, engine,
-   quality, frame rate and size: 24, 25, 30 or 50 fps; 720p to 4K, scaled up from the render). Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
+   Pick a length, a World (four examples, or write your own) and the output: format, engine
+   (LTX-2.5 or MiniMax H3), quality (Max, Quality or Fast on LTX-2.5; Quality, Pika or Fast on
+   H3), frame rate (24, 25, 30 or 50 fps) and size (720p to 4K, scaled up from the render).
+   Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
    close-ups only, crowd, cast order, seed), the take check's retries and the model versions.
    The project name is optional (the song's title otherwise). The buttons say how long the plan
    and the video will take.
@@ -219,7 +221,7 @@ from OpenAI Whisper (large-v3-turbo, about 1.6 GB, downloaded into `ComfyUI/mode
 first time). The Studio lists any H3 files the chosen model set is missing.
 
 On H3, b-roll cutaways render on [Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) when
-it is installed: its ref2va LoRA (`pika_h3_flex_ref2va_comfy_bf16.safetensors`, 1.8 GB, from the
+it is installed: its ref2va LoRA (`pika_h3_flex_ref2va_comfy_bf16.safetensors`, 2.0 GB, from the
 repo's `comfy/loras`) on H3's pruned ref2va model (`minimax_h3_ref2va_pruned_bf16`, or `_int8_convrot`
 in the 24 GB set), with Pika's own 6-step schedule. On cutaways it kept to the keyframe and never
 letterboxed, in about 80% of the time; singer clips stay on the fast H3 model, which was sharper on
@@ -228,6 +230,22 @@ faces. Without those files, cutaways render on the fast H3 model like the singer
 The Pika tier (H3 only) renders every clip on Pika-H3-Flex, singers too: 6 steps instead of 8 at
 Quality's size. A 4.5 s singer clip took 133 s instead of 162 s on an RTX PRO 6000, with the same
 lip sync (SyncNet 5.5 vs 5.7) and slightly softer skin. It needs the two Pika files above.
+
+<img src="media/studio_quality.png" width="300" align="right" alt="The Brief's Output card on MiniMax H3: Quality, Pika and Fast, each with its render size and expected time">
+
+The Brief shows each tier's render size and a rough time for the chosen length, and lists any
+model files the choice needs that aren't installed.
+
+Time for one 4.5 s clip on an RTX PRO 6000 (full set):
+
+| Engine and tier | Time |
+|---|---|
+| LTX-2.5 Quality | about 45 s |
+| LTX-2.5 Max | about 3 min |
+| MiniMax H3 Quality | about 2 min 40 s |
+| MiniMax H3 Pika | about 2 min 15 s |
+
+<br clear="right">
 
 "To the music" cuts on the beat to a new face in the same spot: about every half bar on subtle,
 about every beat on intense.
@@ -245,16 +263,18 @@ about every beat on intense.
    ..\..\..\python_embeded\python.exe -m pip install -r requirements.txt
    ```
    Otherwise `pip install -r requirements.txt` in ComfyUI's environment.
-2. Install these node packs: [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo),
-   [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) (the LTX attention tuner and Sage
-   attention) and [RES4LYF](https://github.com/ClownsharkBatwing/RES4LYF) (samplers). OneShot MV
-   was built on ComfyUI 0.39; it needs a recent ComfyUI for the core Generate Text node, Krea 2
-   and App mode.
+2. Install these node packs: [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo)
+   (the IC-LoRA loader for looks), [RES4LYF](https://github.com/ClownsharkBatwing/RES4LYF)
+   (samplers) and [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux)
+   (DWPose, for looks). For MiniMax H3 at Quality and Pika, also
+   [comfyui-SelfLift](https://github.com/facok/comfyui-SelfLift). OneShot MV needs a recent
+   ComfyUI for the core Generate Text node, Krea 2, LTX-2.5, the MiniMax H3 nodes and App mode.
 3. Download a model set (see [Two model sets](#two-model-sets)): the 24 GB set for most cards,
-   the full set if your GPU has 48 GB or more. Diffusion models go in `models/diffusion_models`,
-   LoRAs in `models/loras`, text encoders in `models/text_encoders`, VAEs in `models/vae`, the
-   LTX-2.3 checkpoint (its Gemma 3 is the language model of the World and the vision check) in
-   `models/checkpoints` and the LTX-2.5 upscaler in `models/latent_upscale_models`.
+   the full set if your GPU has 48 GB or more, and the MiniMax H3 files if you want that engine.
+   Diffusion models go in `models/diffusion_models`, LoRAs in `models/loras`, text encoders in
+   `models/text_encoders`, VAEs in `models/vae`, the LTX-2.3 checkpoint (its Gemma 3 is the
+   language model of the World and the vision check) in `models/checkpoints`, and the LTX-2.5
+   and H3 upscalers in `models/latent_upscale_models`.
    Sub-folders are fine: OneShot MV looks each file up by name. If you rename a file, change its
    name in `fv/models.json` (24 GB set) or `fv/models_full.json` (full set).
 4. Optional, but recommended, the checks:
@@ -271,41 +291,32 @@ about every beat on intense.
      [`face_detection_yunet_2023mar.onnx`](https://huggingface.co/opencv/face_detection_yunet) in
      `ComfyUI/models/facedetection/`. It finds the face for match cuts, the mouth check and the
      Character photo's crop. Without it, the photo is cut from the top.
-   - Speed: [SageAttention](https://github.com/thu-ml/SageAttention) makes the LTX clips faster.
-     If it isn't installed, the jobs run without it. The default kernel in `fv/models.json`
-     (`ltx23_sage`) needs an RTX 40 or 50 series card; set it to `auto` on older cards.
    - The vocal and drum stems use torchaudio's Hybrid Demucs, which downloads its weights the
      first time it runs.
 
 ### Hardware and time
 
-The default model set is made for 24 GB GPUs (RTX 3090, 4090 or 5090) and wants at least 64 GB of
-system RAM, because ComfyUI keeps part of LTX-2.3 in RAM while it renders. The full set wants a
-GPU with 48 GB or more. Model versions under the Studio's Advanced, the Director's `models`
-setting and `sdk_run.py --models` choose the set. Auto uses the full set on a 48 GB+ GPU when its
-files are installed, and the 24 GB set otherwise; memory set aside with `--reserve-vram` counts
-against the card. The Studio also lists any files the chosen set is missing.
+The 24 GB set is made for 24 GB GPUs (RTX 3090, 4090 or 5090) and wants at least 64 GB of system
+RAM, where ComfyUI keeps the weights it swaps out. The full set wants a GPU with 48 GB or more.
+Model versions under the Studio's Advanced, the Director's `models` setting and
+`sdk_run.py --models` choose the set. Auto uses the full set on a 48 GB+ GPU when its files are
+installed, and the 24 GB set otherwise; memory set aside with `--reserve-vram` counts against
+the card. The Studio also lists any files the chosen set is missing.
 
-OneShot MV was built and tested on an NVIDIA RTX PRO 6000 (96 GB) with the full set. Times on that
-card:
+OneShot MV was built and tested on an NVIDIA RTX PRO 6000 (96 GB) with the full set. Recent runs
+on that card, from Make the video to the finished cut:
 
 | Video | Time |
 |---|---|
-| 32 s, quality | about 70 min |
-| 1:51, quality | about 6 h 45 min |
+| 30 s, LTX-2.5 Quality (1080p) | 15 to 30 min |
+| 30 s, MiniMax H3 Fast | about 1 h |
+| 30 s, MiniMax H3 Quality at 1344×768 (before 1080p) | about 1 h 50 min |
 | Re-cut (post processing) | about 2 min |
-| Re-shoot one shot | about 10 to 15 min, mostly model loading |
-| 1:04, quality, 24 GB set on the same card held to 24 GB | about 3 h 35 min |
 
-On a cold start, loading LTX-2.3 and its Gemma 3 text encoder (about 65 GB with the full set)
-takes 5 to 9 minutes from a SATA SSD and about a minute from NVMe.
-
-The 24 GB time comes from the same card with ComfyUI held to 24 GB (`--reserve-vram 72`, without
-`--highvram`). It is about 1.6 times the full set, and most of the extra time is the lip-sync
-clips: LTX-2.3 fp8 and its LoRAs are larger than 24 GB, so ComfyUI swaps part of them in from
-system RAM on every step (about 2 minutes a clip instead of 45 seconds). Fast renders
-smaller clips in fewer steps; use Quality for anything you'll show. A real 24 GB card has
-less compute than the RTX PRO 6000, so expect it to take longer still.
+A re-shoot takes about one clip's time (see [Settings](#settings)) plus loading the models. The
+time depends most on how many shots the song gets, since each shot is a clip, and on the take
+check's re-shoots. A real 24 GB card has less compute than the RTX PRO 6000, so expect it to take
+longer.
 
 ## What a run leaves behind
 
@@ -355,38 +366,67 @@ every shot. The dance-driven motion packs (`spotlight`, `wardrobe`) are experime
 ## Models and licences
 
 The code is MIT. The models are open weights under their own terms, and none are included here.
-In short: for companies under US$1M in annual revenue, the default models (Krea 2, LTX-2.3,
-Gemma 3) allow commercial use, outputs included. The optional insightface face models are for
+In short: for companies under US$1M in annual revenue, the default models (Krea 2, LTX-2.5,
+LTX-2.3's Gemma 3) allow commercial use, outputs included. MiniMax H3, FastH3 and Pika-H3-Flex are
+under the MiniMax H3 Community License. The optional insightface face models are for
 non-commercial research only, and LTX's licence asks you to label what you publish as
 AI-generated. Read each licence before you rely on it.
 
 ### Two model sets
 
-The 24 GB set (the default) uses fp8 files and one Krea 2 Turbo model for both passes of every
-still. The full set uses the original bf16 files, with Krea 2 Raw and the Turbo LoRA for the second
-pass. Both use the same LTX LoRAs, upscaler and VAE.
+The 24 GB set (the default) uses int8 and fp8 files and one Krea 2 Turbo model for both passes of
+every still. The full set uses bf16 files, with Krea 2 Raw and the Turbo LoRA for the second
+pass. Both use the same VAEs, upscalers and LoRAs.
 
 | Model | 24 GB set (default) | Full set (48 GB+) | Download |
 |---|---|---|---|
-| LTX-2.3 22B dev | `ltx-2.3-22b-dev-fp8.safetensors`, 29.1 GB | `ltx-2.3-22b-dev.safetensors`, 46.1 GB | [Lightricks/LTX-2.3-fp8](https://huggingface.co/Lightricks/LTX-2.3-fp8), [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) |
+| LTX-2.5 22B distilled | `ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors`, 21.5 GB | `ltx-2.5-22b-distilled-transformer-bf16.safetensors`, 42.0 GB | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| Gemma 4 12B (LTX-2.5's text encoder) | `gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors`, 15.4 GB | `gemma4-12b-with-proj-ltx-2.5-bf16.safetensors`, 26.3 GB | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| LTX-2.3 22B dev (for its Gemma 3) | `ltx-2.3-22b-dev-fp8.safetensors`, 29.1 GB | `ltx-2.3-22b-dev.safetensors`, 46.1 GB | [Lightricks/LTX-2.3-fp8](https://huggingface.co/Lightricks/LTX-2.3-fp8), [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) |
 | Gemma 3 12B IT | `gemma_3_12B_it_fp8_scaled.safetensors`, 13.2 GB | `gemma_3_12B_it.safetensors`, 24.4 GB | [Comfy-Org/ltx-2](https://huggingface.co/Comfy-Org/ltx-2/tree/main/split_files/text_encoders) |
 | Krea 2 Turbo | `krea2_turbo_fp8_scaled.safetensors`, 13.1 GB | `krea2_turbo_bf16.safetensors`, 26.3 GB | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
 | Krea 2 Raw and the Turbo LoRA (rank 64) | not used | `krea2_raw_bf16.safetensors`, 26.3 GB, and `krea2_turbo_lora_rank_64_bf16.safetensors`, 0.5 GB | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
 | Qwen3-VL 4B (Krea 2's text encoder) | `qwen3vl_4b_fp8_scaled.safetensors`, 5.2 GB | `qwen3vl_4b_bf16.safetensors`, 8.9 GB | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
-| Both sets | The LTX-2.3 distilled LoRA 384 v1.1 (7.6 GB), the IC-LoRA Detailer (about 2.4 GB), Crisp and Soft Enhance (about 0.7 GB), the spatial upscaler x2 v1.1 (1.0 GB) and the Qwen-Image VAE (0.25 GB) | | See the table below |
+| Both sets | The LTX-2.5 video and audio VAEs (1.9 GB), the LTX-2.5 spatial upscaler x2 (1.0 GB), the LTX-2.3 IC-LoRA Union Control (0.7 GB) and the Qwen-Image VAE (0.25 GB) | | See the tables below |
 
-In all, the 24 GB set is about 73 GB to download and the full set about 144 GB.
+In all, a default run's 24 GB set is about 100 GB to download and the full set about 205 GB.
+
+MiniMax H3 (the second engine) adds:
+
+| Model | 24 GB set | Full set | Download |
+|---|---|---|---|
+| FastH3 Omni-ref 8-step (pruned) | `fasth3_omniref_8step_pruned_int8_convrot.safetensors`, 22.2 GB | `fasth3_omniref_8step_pruned_bf16.safetensors`, 44.2 GB | [FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy) |
+| Qwen3-VL 32B (H3's text encoder) | `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`, 15.7 GB | `qwen3vl_32b_minimax_h3_int8_convrot.safetensors`, 27.1 GB | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| H3 video VAE | `minimax_h3_video_vae_int8_convrot.safetensors`, 2.8 GB | `minimax_h3_video_vae_fp16.safetensors`, 5.2 GB | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| H3 audio VAE | `minimax_h3_audio_vae_fp32.safetensors`, 0.6 GB | the same | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| H3 latent upscaler (Quality and Pika at 1080p) | `minimax_h3_latent_upscaler_3d_fp32.pth`, 1.4 GB | the same | [LBH-123-AI/Minimax_h3_latent_Upscaler](https://huggingface.co/LBH-123-AI/Minimax_h3_latent_Upscaler) |
+| H3 ref2va (pruned), for Pika | `minimax_h3_ref2va_pruned_int8_convrot.safetensors`, 21.0 GB | `minimax_h3_ref2va_pruned_bf16.safetensors`, 40.2 GB | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| Pika-H3-Flex ref2va LoRA | `pika_h3_flex_ref2va_comfy_bf16.safetensors`, 2.0 GB | the same | [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) (`comfy/loras`) |
+
+The Max tier on LTX-2.5 adds `ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors`
+(21.5 GB; `-bf16`, 42.0 GB, in the full set) and `ltx-2.5-22b-distilled-lora-450-bf16.safetensors`
+(8.9 GB), both from [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5).
 
 A default run (voice mode, `crowd` pack) uses:
 
 | Model | Used for | Licence | Download |
 |---|---|---|---|
 | Krea 2 Turbo, the Qwen3-VL 4B text encoder and the Qwen-Image VAE (full set: also Krea 2 Raw and the Turbo LoRA) | Every portrait and b-roll still | Krea 2 Community License: commercial use of the model and its images only for companies under US$1M annual revenue (Qwen3-VL and the VAE are Apache-2.0 upstream) | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
-| LTX-2.3 22B dev, the distilled LoRA 384 v1.1 and the spatial upscaler x2 v1.1 | Every clip: lip sync and b-roll | LTX-2 Community License: free under US$10M annual revenue; label output as machine-generated; no impersonation without consent | [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) |
-| LTX-2 19B IC-LoRA Detailer | Fine detail in every clip | LTX-2 Community License | [Lightricks/LTX-2-19b-IC-LoRA-Detailer](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Detailer) |
-| LTX2.3 Crisp Enhance and Soft Enhance (community LoRAs by vrgamedevgirl84) | Sharpness and detail in every clip | No licence stated by the author. To run without them, remove them from `ltx23_loras` in `fv/models.json` | [CivitAI: LTX 2.3 Enhancers](https://civitai.com/models/2535622/ltx-23-enhancers) |
-| Gemma 3 12B IT | LTX-2.3's text encoder; it also writes the World and the b-roll prompts and runs the vision check | Gemma Terms of Use and Prohibited Use Policy | [Comfy-Org/ltx-2](https://huggingface.co/Comfy-Org/ltx-2/tree/main/split_files/text_encoders) |
+| LTX-2.5 22B distilled, its video and audio VAEs, its spatial upscaler and its Gemma 4 text encoder | Every clip on LTX-2.5 (the default engine) | LTX-2.x Community License: free under US$10M annual revenue; label output as machine-generated; no impersonation without consent | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| LTX-2.3 22B dev and Gemma 3 12B IT | Gemma 3 writes the World and the b-roll prompts and runs the vision check (it loads through the LTX-2.3 checkpoint; no clip renders on LTX-2.3) | LTX-2 Community License; Gemma Terms of Use and Prohibited Use Policy | [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3), [Comfy-Org/ltx-2](https://huggingface.co/Comfy-Org/ltx-2/tree/main/split_files/text_encoders) |
+| LTX-2.3 IC-LoRA Union Control (ref0.5) | Pose-matched looks | LTX-2 Community License | [Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control) |
+| DWPose and YOLOX-L (TorchScript) | Pose guides for looks | Apache-2.0 | Downloaded by [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux) |
 | Hybrid Demucs (`HDEMUCS_HIGH_MUSDB_PLUS`) | Vocal and drum stems | Code MIT; no separate weights licence is published | Downloaded by torchaudio on first use |
+
+With MiniMax H3, or the Max tier:
+
+| Model | Used for | Licence | Download |
+|---|---|---|---|
+| FastH3 Omni-ref 8-step, the Qwen3-VL 32B H3 text encoder and the H3 VAEs | Singer clips on H3 (Quality and Fast) | MiniMax H3 Community License | [FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy), [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| MiniMax H3 ref2va (pruned) and the Pika-H3-Flex ref2va LoRA | B-roll cutaways on H3; every clip at the Pika tier | MiniMax H3 Community License (Pika asks for credit when used in products) | [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex), [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
+| H3 latent upscaler (3D, fp32) | H3 Quality and Pika at 1080p | Apache-2.0 | [LBH-123-AI/Minimax_h3_latent_Upscaler](https://huggingface.co/LBH-123-AI/Minimax_h3_latent_Upscaler) |
+| OpenAI Whisper large-v3-turbo | The sung words in H3's prompts | MIT | Downloaded into `ComfyUI/models/whisper` on first use |
+| LTX-2.5 22B dev and the distilled LoRA 450 | The Max tier | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
 
 The optional checks (Install, step 4):
 
@@ -401,11 +441,13 @@ Models that only other packs and modes use (a default run never loads them):
 | Model | Used for | Licence | Download |
 |---|---|---|---|
 | FLUX.2 [klein] 9B fp8, its Qwen3 8B text encoder and the FLUX.2 small-decoder VAE | Look keyframes in the `eras` and `artist` packs; motion mode | FLUX Non-Commercial License (outputs may be used commercially); the VAE is Apache-2.0 | [black-forest-labs/FLUX.2-klein-9b-fp8](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8), [Comfy-Org/flux2-klein-9B](https://huggingface.co/Comfy-Org/flux2-klein-9B), [FLUX.2-small-decoder](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder) |
-| LTX-2.3 IC-LoRA Union Control (ref0.5) | Pose-matched looks; motion mode | LTX-2 Community License | [Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control) |
-| DWPose and YOLOX-L (TorchScript) | Pose guides for looks and motion mode | Apache-2.0 | Downloaded by [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux), which these packs and modes also need |
-| Qwen-Image 2.1, its VAE and the Qwen3-VL 8B text encoder | Portraits in the `artist` pack | Check the licence on the model page before commercial use | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) |
-| MiniMax H3 ref2va (pruned) and the Pika-H3-Flex ref2va LoRA | B-roll cutaways on H3 (optional); every clip at the Pika tier | MiniMax H3 Community License (Pika asks for credit when used in products) | [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex), [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
-| LTX-2.5 22B distilled, its VAEs, upscaler and Gemma 4 text encoder; the 22B dev model and distilled LoRA (Max) | Singer clips on LTX-2.5; motion mode at the `fast` preset | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| Qwen-Image 2.1, its VAE and the Qwen3-VL 8B text encoder | Portraits in the `artist` pack (Characters) | Check the licence on the model page before commercial use | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) |
+
+Re-shooting a run made on LTX-2.3 (before the engine choice) also needs its old LoRAs (the
+distilled LoRA 384 v1.1, the IC-LoRA Detailer, Crisp and Soft Enhance), its spatial upscaler x2
+v1.1, [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) and, optionally,
+[SageAttention](https://github.com/thu-ml/SageAttention): the `ltx23_*` entries in
+`fv/models.json`.
 
 File names are set in `fv/models.json` and `fv/models_full.json`.
 

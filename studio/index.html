@@ -706,6 +706,8 @@ function saveBrief(){ store.set("brief", S.brief); }
 const projectOf = r => (r && r.project) || (DEMO && r ? ((store.get("briefs", {})[r.run] || {}).name || "") : "");
 const fileStem = r => (projectOf(r).replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80)) || r.run;
 // the file stem of a run's take ("r004A") from its /api/view URL, for opening its job in ComfyUI
+// a run's render preset as the Brief names it (fv/formats.py PRESETS)
+const presetName = p => ({h3: "H3 quality", h3_fast: "H3 fast", h3_pika: "H3 Pika", fast_voice: "fast"}[p] || p || "");
 const takeStem = url => (new URLSearchParams(String(url).split("?")[1] || "").get("filename") || "").replace(/_00001_.*$/, "");
 // a song file's name as a title: no folder, extension or "(Official Music Video)"-style tags
 const songTitle = f => String(f || "").split("/").pop().replace(/\.[^.]+$/, "").replace(/\s*[(\[][^)\]]*[)\]]/g, "").replace(/[_]+/g, " ").trim().slice(0, 80) || "Untitled";
@@ -1212,7 +1214,7 @@ async function viewPlan(run){
   const est = brief ? estimate(Object.assign({}, brief)) : r.estimate_min;
   const levels = r.shots.map(s => `<span style="flex:${s.len};background:${LEVEL_COL[s.energy]||'var(--mid)'}" title="${esc(s.time)} ${esc(s.energy)}"></span>`).join("");
   app.innerHTML = `
-  <div class="head"><div><h1>The plan</h1>${projectOf(r) || (brief && brief.name) ? `<p class="proj">${esc(projectOf(r) || brief.name)}</p>` : ""}<p class="sub">${esc(w.headline || "House look")} · ${esc(b.from)} – ${esc(b.to)} · ${esc(b.format)} · ${esc(b.preset)} · ${r.shots.length} shots</p></div>
+  <div class="head"><div><h1>The plan</h1>${projectOf(r) || (brief && brief.name) ? `<p class="proj">${esc(projectOf(r) || brief.name)}</p>` : ""}<p class="sub">${esc(w.headline || "House look")} · ${esc(b.from)} – ${esc(b.to)} · ${esc(b.format)} · ${esc(presetName(b.preset))} · ${r.shots.length} shots</p></div>
     <span class="mono muted" style="font-size:12px">Nothing is rendered yet</span></div>
   <div class="cols">
    <section class="card stack" style="flex:1 1 340px;min-width:0;gap:18px" aria-labelledby="wh">
@@ -1267,7 +1269,7 @@ function shotClass(fmt){ return fmt === "9:16" ? "v" : (fmt === "1:1" ? "sq" : "
 function renderSkeleton(r){
   const app = $("#app");
   app.innerHTML = `
-  <div class="head"><div><h1>Making your video</h1>${projectOf(r) ? `<p class="proj">${esc(projectOf(r))}</p>` : ""}<p class="sub">${esc(r.world.headline || "House look")} · ${esc(r.brief.from)} – ${esc(r.brief.to)} · ${esc(r.brief.format)} · ${esc(r.brief.preset)}</p></div>
+  <div class="head"><div><h1>Making your video</h1>${projectOf(r) ? `<p class="proj">${esc(projectOf(r))}</p>` : ""}<p class="sub">${esc(r.world.headline || "House look")} · ${esc(r.brief.from)} – ${esc(r.brief.to)} · ${esc(r.brief.format)} · ${esc(presetName(r.brief.preset))}</p></div>
     <div style="text-align:right"><div class="mono" style="font-size:22px;font-weight:600" id="elapsed"></div><div class="muted" style="font-size:14px" id="left"></div></div></div>
   <div id="stall"></div>
   <div class="progress" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" id="pbar"><div id="pfill" style="width:0"></div></div>
@@ -1329,7 +1331,7 @@ async function viewResult(run){
   const F0 = Object.assign({fx: Object.assign({}, fx0)}, r.finish || {});
   const E = Object.assign({}, F0, {fx: Object.assign({}, fx0)});
   app.innerHTML = `
-  <div class="head"><div><h1>${esc(projectOf(r) || r.world.headline || "Your video")}</h1><p class="sub">${projectOf(r) ? esc(r.world.headline || "House look") + " · " : ""}${esc(r.brief.from)} – ${esc(r.brief.to)} · ${esc(r.brief.format)} · ${esc(r.brief.preset)} · ${sing} singers · made in ${mins(r.elapsed_min)}${r.pickup && r.pickup.n ? ` · ${r.pickup.n} round${r.pickup.n > 1 ? "s" : ""} of pickups` : ""}</p></div>
+  <div class="head"><div><h1>${esc(projectOf(r) || r.world.headline || "Your video")}</h1><p class="sub">${projectOf(r) ? esc(r.world.headline || "House look") + " · " : ""}${esc(r.brief.from)} – ${esc(r.brief.to)} · ${esc(r.brief.format)} · ${esc(presetName(r.brief.preset))} · ${sing} singers · made in ${mins(r.elapsed_min)}${r.pickup && r.pickup.n ? ` · ${r.pickup.n} round${r.pickup.n > 1 ? "s" : ""} of pickups` : ""}</p></div>
     <div class="row"><a class="btn" href="#/">New video</a>
       <a class="btn" id="xml" href="/oneshot-mv/api/xml/${encodeURIComponent(r.run)}" download="${esc(fileStem(r))}.xml" title="Final Cut Pro 7 XML: every shot's clip with its in and out points and the song, for Premiere Pro and DaVinci Resolve"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4L1.5 8 5 12M11 4l3.5 4-3.5 4M9.5 2.5l-3 11"/></svg>Export XML</a>
       <a class="btn primary" id="dl" href="${esc(r.video)}" download="${esc(fileStem(r))}.mp4"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v9M4 7l4 4 4-4M3 14h10"/></svg>Download MP4</a></div></div>
