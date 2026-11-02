@@ -70,6 +70,7 @@ RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", 
             "ltx25_audio_vae", "ltx25_te", "ltx25_upscaler", "ltx_union_lora",  # what a default voice run loads (looks too)
             "ltx23_ckpt", "ltx23_te")  # LTX-2.3's Gemma 3: the language model of the vision check and the World
 H3_KEYS = ("h3_unet", "h3_te", "h3_vae", "h3_audio_vae")  # the singer clips on MiniMax H3
+PIKA_KEYS = ("h3_pika_unet", "h3_pika_lora")  # H3 b-roll on Pika-H3-Flex (optional: else on h3_unet)
 MAX_KEYS = ("ltx25_dev_unet", "ltx25_distill_lora")  # the Max preset (LTX-2.5 dev)
 ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
                "klein_unet", "klein_te", "klein_vae")      # and its looks
@@ -377,19 +378,19 @@ CONTINUITY = "One continuous take with no cuts: the same person in the same plac
 def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
                audio_path=None, audio_seek=0.0, guide_video=None, guide_start=0.0,
                guide_strength=1.0, guide_face=True, save_pose=False, key_strengths=None,
-               keyframes=None, continuity=True, size=None):
+               keyframes=None, continuity=True, size=None, broll=False):
     """One LTX clip. audio_path -> lip sync on a frozen vocal latent (voice);
     guide_video -> DWPose union-control guide (twins, motion).
     keyframes: [(image_path, frame_idx, strength)] pinned at later frames of the clip, in every
     stage (a look group: one clip that switches person on the beat, each look's keyframe pinned
     at its cut frame; continuity=False, since the clip is meant to change person).
     size: the clip's (last stage's) size, the run's own (formats.render_size with its plan);
-    None for the preset's current size."""
+    None for the preset's current size. broll: a cutaway (on MiniMax H3: see h3_render)."""
     pr = formats.PRESETS[preset]
     if pr["engine"] == "h3":  # the same call renders on MiniMax H3 (its prompt written for it)
         return h3_render(preset=preset, fmt=fmt, key_path=key_path, prompt=prompt, frames=frames, seed=seed,
                          prefix=prefix, audio_path=audio_path, audio_seek=audio_seek, guide_video=guide_video,
-                         guide_start=guide_start, size=size)
+                         guide_start=guide_start, size=size, broll=broll)
     fps = pr["fps"]
     sizes = formats.stage_sizes(fmt, preset, size)
     g = Graph()
@@ -504,12 +505,24 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
 H3_STEPS = 8          # the fast omni-reference model's schedule
 H3_LIFT_AT = 6        # SelfLift: steps at the native size before the lift (the last 2 at full size)
 H3_SHIFT = (12.0, 3.0)  # ModelSamplingMiniMaxH3: video, audio
+# Pika-H3-Flex (a LoRA on H3's ref2va model): its six knots 1000/750/500/250/100/40 at shift 12, with
+# fresh noise at every step (lcm), as in ComfyUI's Pika template; under SelfLift (euler only) the
+# lift comes after 4 of them
+PIKA_SIGMAS = "1.0, 0.972973, 0.923077, 0.8, 0.571429, 0.333333, 0.0"
+PIKA_LIFT_AT = 4
 
 
-def _h3(g):
-    unet = g.add("UNETLoader", unet_name=M["h3_unet"], weight_dtype="default")
-    model = O(g.add("MiniMaxH3SigmaShift", model=_ram_backups(g, O(unet)), shift_video=H3_SHIFT[0],
-                    shift_audio=H3_SHIFT[1]))
+def pika_ready() -> bool:
+    """Whether H3 b-roll can render on Pika-H3-Flex here (its LoRA and base model installed)."""
+    return not missing_files(M.get("_set", "24gb"), keys=PIKA_KEYS)
+
+
+def _h3(g, pika=False):
+    unet = g.add("UNETLoader", unet_name=M["h3_pika_unet" if pika else "h3_unet"], weight_dtype="default")
+    model = _ram_backups(g, O(unet))
+    if pika:
+        model = O(g.add("LoraLoaderModelOnly", model=model, lora_name=M["h3_pika_lora"], strength_model=1.0))
+    model = O(g.add("MiniMaxH3SigmaShift", model=model, shift_video=H3_SHIFT[0], shift_audio=H3_SHIFT[1]))
     clip = g.add("CLIPLoader", clip_name=M["h3_te"], type="minimax", device="default")
     vae = g.add("VAELoader", vae_name=M["h3_vae"])
     avae = g.add("VAELoader", vae_name=M["h3_audio_vae"])
@@ -532,22 +545,25 @@ def h3_upscaler() -> str | None:
 
 
 def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path=None, audio_seek=0.0,
-              guide_video=None, guide_start=0.0, size=None):
+              guide_video=None, guide_start=0.0, size=None, broll=False):
     """One MiniMax H3 clip in reference mode (fv/h3.py writes its prompt): <Picture 1> the
     keyframe, also pinned as the first frame; <Audio 1> the clip's vocal, copied 1:1 and pinned
     at frame 0 so the mouth lands on it; <Video 1> (a look) the lead's clip, for the pose. The
     take is saved with the original vocal, like an LTX clip.
     Above H3's native size (Quality), the first H3_LIFT_AT steps run at the native size, H3's
     latent upscaler lifts the clip, and the last steps run at full size (SelfLift); without
-    SelfLift the clip renders at the native size and is scaled up."""
+    SelfLift the clip renders at the native size and is scaled up.
+    broll: a cutaway, rendered on Pika-H3-Flex when it's installed (on B-roll it kept to the
+    keyframe and never letterboxed, in about 80% of fasth3's time; on singers it was softer)."""
     fps = formats.H3_FPS
+    pika = broll and pika_ready()
     w, h = size or formats.render_size(fmt, preset)
     nw, nh = formats.H3_NATIVE[fmt]
     lift = w * h > nw * nh
     ups = h3_upscaler() if lift else None
     rw, rh = (w, h) if ups or not lift else (nw, nh)  # the size H3 samples at
     g = Graph()
-    m = _h3(g)
+    m = _h3(g, pika)
     refs = {}
     key = None
     if key_path:
@@ -571,11 +587,13 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
             kw.update(audio=au, audio_vae=m["avae"])
         pos = O(g.add("MiniMaxH3AddGuide", positive=pos, latent=lat, frame_idx=0, **kw))
     guider = g.add("BasicGuider", model=m["model"], conditioning=pos)
-    sig = g.add("BasicScheduler", model=m["model"], scheduler="beta", steps=H3_STEPS, denoise=1.0)
-    euler = g.add("KSamplerSelect", sampler_name="euler")
+    sig = (g.add("ManualSigmas", sigmas=PIKA_SIGMAS) if pika else
+           g.add("BasicScheduler", model=m["model"], scheduler="beta", steps=H3_STEPS, denoise=1.0))
+    euler = g.add("KSamplerSelect", sampler_name="lcm" if pika and not ups else "euler")
     if ups:
         s = g.add("SelfLiftH3Sampler", model=m["model"], positive=pos, negative=pos, vae=m["vae"], latent_image=lat,
-                  sampler=O(euler), sigmas=O(sig), seed=seed, cfg=1.0, transition_step=H3_LIFT_AT,
+                  sampler=O(euler), sigmas=O(sig), seed=seed, cfg=1.0,
+                  transition_step=PIKA_LIFT_AT if pika else H3_LIFT_AT,
                   lowres_scale=round(nh / h, 4), rho=0.0, w_min=0.5, w_max=1.0, upscaler_model=ups,
                   upscaler_unload=True)
     else:

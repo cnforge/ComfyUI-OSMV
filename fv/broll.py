@@ -309,7 +309,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             clips.append(graphs.ltx_render(preset=preset, fmt=fmt, size=formats.render_size(fmt, preset, p), key_path=key if stills else None,
                                            prompt=_for_engine(preset, motion, frames, rfps, os.path.exists(drums)),
                                            negative=NEGATIVE, frames=frames, seed=seed,
-                                           prefix=f"{rel}/r{rid:03d}R",
+                                           prefix=f"{rel}/r{rid:03d}R", broll=True,
                                            audio_path=drums if os.path.exists(drums) else None,
                                            audio_seek=seek).nodes)
         elif kind == "dance":
@@ -332,7 +332,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             clips.append(graphs.ltx_render(preset=preset, fmt=fmt, size=formats.render_size(fmt, preset, p), key_path=key if stills else None,
                                            prompt=_for_engine(preset, motion, frames, rfps, os.path.exists(drums)),
                                            negative=NEGATIVE, frames=frames, seed=seed,
-                                           prefix=f"{rel}/r{rid:03d}R",
+                                           prefix=f"{rel}/r{rid:03d}R", broll=True,
                                            audio_path=drums if os.path.exists(drums) else None,
                                            audio_seek=seek).nodes)
         else:
@@ -345,7 +345,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
                                            prompt=_for_engine(preset, period_background(img + STILL + MOTION, pera),
                                                               frames, rfps, False, empty=True),
                                            negative=NEGATIVE_EMPTY, frames=frames,
-                                           seed=seed, prefix=f"{rel}/r{rid:03d}R").nodes)
+                                           seed=seed, prefix=f"{rel}/r{rid:03d}R", broll=True).nodes)
         r = {"id": rid, "shot": s["index"], "role": "R", "performer": -1, "t_start": round(t_start, 4),
              "frames": frames, "fps": rfps, "size": "medium" if kind in ("dance", "moment") else "wide", "sync_delay": 0.0,
              "key": key, "path": os.path.join(run_dir, f"r{rid:03d}R_00001_.mp4"),

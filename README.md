@@ -218,6 +218,13 @@ MiniMax H3 needs ComfyUI's MiniMax H3 nodes (a recent ComfyUI), its reference mo
 from OpenAI Whisper (large-v3-turbo, about 1.6 GB, downloaded into `ComfyUI/models/whisper` the
 first time). The Studio lists any H3 files the chosen model set is missing.
 
+On H3, b-roll cutaways render on [Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) when
+it is installed: its ref2va LoRA (`pika_h3_flex_ref2va_comfy_bf16.safetensors`, 1.8 GB, from the
+repo's `comfy/loras`) on H3's pruned ref2va model (`minimax_h3_ref2va_pruned_bf16`, or `_int8_convrot`
+in the 24 GB set), with Pika's own 6-step schedule. On cutaways it kept to the keyframe and never
+letterboxed, in about 80% of the time; singer clips stay on the fast H3 model, which was sharper on
+faces. Without those files, cutaways render on the fast H3 model like the singers.
+
 "To the music" cuts on the beat to a new face in the same spot: about every half bar on subtle,
 about every beat on intense.
 
@@ -393,6 +400,7 @@ Models that only other packs and modes use (a default run never loads them):
 | LTX-2.3 IC-LoRA Union Control (ref0.5) | Pose-matched looks; motion mode | LTX-2 Community License | [Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control) |
 | DWPose and YOLOX-L (TorchScript) | Pose guides for looks and motion mode | Apache-2.0 | Downloaded by [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux), which these packs and modes also need |
 | Qwen-Image 2.1, its VAE and the Qwen3-VL 8B text encoder | Portraits in the `artist` pack | Check the licence on the model page before commercial use | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) |
+| MiniMax H3 ref2va (pruned) and the Pika-H3-Flex ref2va LoRA | B-roll cutaways on H3 (optional) | MiniMax H3 Community License (Pika asks for credit when used in products) | [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex), [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | LTX-2.5 22B distilled, its VAEs, upscaler and Gemma 4 text encoder; the 22B dev model and distilled LoRA (Max) | Singer clips on LTX-2.5; motion mode at the `fast` preset | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
 
 File names are set in `fv/models.json` and `fv/models_full.json`.

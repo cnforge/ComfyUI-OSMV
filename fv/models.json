@@ -45,6 +45,8 @@
  "h3_te": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
  "h3_vae": "minimax_h3_video_vae_int8_convrot.safetensors",
  "h3_audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+ "h3_pika_unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+ "h3_pika_lora": "pika_h3_flex_ref2va_comfy_bf16.safetensors",
  "klein_unet": "flux-2-klein-9b-fp8.safetensors",
  "klein_te": "qwen_3_8b_fp8mixed.safetensors",
  "klein_vae": "full_encoder_small_decoder.safetensors",
