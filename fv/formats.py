@@ -27,6 +27,7 @@ for _k, _f in FORMATS.items():
     _f["fast_voice"] = _f["fast"]  # older runs' singing-at-fast preset
     _f["max"] = _f["quality"]  # Max: Quality's size on LTX-2.5's dev model
     _f["h3"], _f["h3_fast"] = _H3[_k]
+    _f["h3_pika"] = _f["h3"]  # Pika: Quality's size, every clip on Pika-H3-Flex
 # what Quality rendered at before 1080p: runs planned then (no "render_wh" in their plan) are
 # cut and re-shot at these sizes
 LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "max": (1280, 768), "h3": (1344, 768)},
@@ -48,19 +49,23 @@ PRESETS = {
     # copied 1:1 as its soundtrack. Its lip offset isn't known yet: SyncNet measures every take.
     "h3": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0},
     "h3_fast": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0},
+    # Pika: every clip (singers too) on the Pika-H3-Flex LoRA, 6 steps instead of fasth3's 8, at
+    # Quality's size. About 20% faster (133 s vs 162 s a 4.5 s clip), skin a touch softer, lip sync the same.
+    "h3_pika": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0, "pika": True},
     # older runs (LTX-2.3, retired): only their assembly and re-shoots read these
     "fast_voice": {"stages": 2, "fps": 25, "engine": "ltx25_distilled", "sync_delay": 0.16},
 }
 LEGACY_SYNC = {"quality": 0.16, "fast_voice": 0.16}  # LTX-2.3's lips led by 0.22-0.26 s
 ENGINES = {"ltx25": "LTX-2.5", "h3": "MiniMax H3"}
-PRESET_NAMES = ["quality", "fast", "max"]  # what users pick; with the engine they make the render preset
+PRESET_NAMES = ["quality", "fast", "max", "pika"]  # what users pick; with the engine they make the render preset
 
 
 def effective_preset(mode: str, preset: str, engine: str = "ltx25") -> str:
-    """The render preset for a speed (max / quality / fast) on an engine (ltx25 / h3). Motion runs
-    (pose-guided dance clips) stay on LTX-2.5. H3 has no Max: its full model looked no better."""
+    """The render preset for a speed (max / quality / fast / pika) on an engine (ltx25 / h3). Motion
+    runs (pose-guided dance clips) stay on LTX-2.5. H3 has no Max: its full model looked no better.
+    Pika is H3's only (on LTX-2.5 it's Quality)."""
     if engine == "h3" and mode == "voice":
-        return "h3_fast" if preset == "fast" else "h3"
+        return {"fast": "h3_fast", "pika": "h3_pika"}.get(preset, "h3")
     return preset if preset in ("quality", "fast", "max") else "quality"
 
 

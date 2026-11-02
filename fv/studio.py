@@ -243,14 +243,15 @@ def _estimate(b: dict) -> dict:
     """The preview's steps and their expected seconds, from the song, the length and whether the
     World is already written for this line and seed."""
     import math
-    from . import broll, casting, plan as planner
+    from . import broll, casting, formats, plan as planner
     path = _input_path(b["song"])
     tl = _analysis(path)["tl"]
     pk = casting.load_pack("crowd")
     cuts = {k[5:]: b[k] for k in ("cuts_low", "cuts_medium", "cuts_high") if b.get(k)}
     if cuts:
         pk["edit"] = dict(pk["edit"], **{f"cut_{lv}": m for lv, m in cuts.items()})
-    p = planner.plan_voice(tl, pk, fmt=b.get("format", "16:9"), preset=b.get("preset", "quality"),
+    p = planner.plan_voice(tl, pk, fmt=b.get("format", "16:9"),
+                           preset=formats.effective_preset("voice", b.get("preset", "quality"), _engine(b)),
                            seconds=float(b.get("seconds", 30)), start=float(b.get("start", -1)),
                            seed=int(b.get("seed", 1)), framing="mixed")
     win = float(p["song_t1"] - p["song_t0"])
@@ -574,7 +575,7 @@ def _notes(d: str, p: dict, label_of: dict, done: bool = False) -> list[dict]:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = {"max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0}.get(p.get("preset"), 1.0)
+    per = {"max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
     return 6 + per * dur
 
 

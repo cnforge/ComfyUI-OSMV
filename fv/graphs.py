@@ -70,7 +70,7 @@ RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", 
             "ltx25_audio_vae", "ltx25_te", "ltx25_upscaler", "ltx_union_lora",  # what a default voice run loads (looks too)
             "ltx23_ckpt", "ltx23_te")  # LTX-2.3's Gemma 3: the language model of the vision check and the World
 H3_KEYS = ("h3_unet", "h3_te", "h3_vae", "h3_audio_vae")  # the singer clips on MiniMax H3
-PIKA_KEYS = ("h3_pika_unet", "h3_pika_lora")  # H3 b-roll on Pika-H3-Flex (optional: else on h3_unet)
+PIKA_KEYS = ("h3_pika_unet", "h3_pika_lora")  # H3 b-roll on Pika-H3-Flex (optional: else on h3_unet); the Pika preset
 MAX_KEYS = ("ltx25_dev_unet", "ltx25_distill_lora")  # the Max preset (LTX-2.5 dev)
 ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
                "klein_unet", "klein_te", "klein_vae")      # and its looks
@@ -151,6 +151,8 @@ def not_ready(requested: str | None = "auto", artist: bool = False, engine: str 
         files += missing_files(name, keys=H3_KEYS)
         if not _has_node("MiniMaxH3ReferenceToVideo"):
             packs = packs + ["ComfyUI's MiniMax H3 nodes (update ComfyUI)"]
+        if preset == "pika":
+            files += missing_files(name, keys=PIKA_KEYS)
     elif preset == "max":
         files += missing_files(name, keys=MAX_KEYS)
     why = []
@@ -173,6 +175,7 @@ def models_report() -> dict:
             "missing_character": missing_files("24gb", idx, ARTIST_KEYS),  # the same files in both sets
             "missing_h3": {n: missing_files(n, idx, H3_KEYS) for n in MODEL_SETS},
             "missing_max": {n: missing_files(n, idx, MAX_KEYS) for n in MODEL_SETS},
+            "missing_pika": {n: missing_files(n, idx, PIKA_KEYS) for n in MODEL_SETS},
             "missing_checks": missing_checks()}
 
 
@@ -554,9 +557,10 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
     latent upscaler lifts the clip, and the last steps run at full size (SelfLift); without
     SelfLift the clip renders at the native size and is scaled up.
     broll: a cutaway, rendered on Pika-H3-Flex when it's installed (on B-roll it kept to the
-    keyframe and never letterboxed, in about 80% of fasth3's time; on singers it was softer)."""
+    keyframe and never letterboxed, in about 80% of fasth3's time; on singers it was softer).
+    The Pika preset renders every clip on it."""
     fps = formats.H3_FPS
-    pika = broll and pika_ready()
+    pika = (broll or formats.PRESETS[preset].get("pika", False)) and pika_ready()
     w, h = size or formats.render_size(fmt, preset)
     nw, nh = formats.H3_NATIVE[fmt]
     lift = w * h > nw * nh
@@ -725,7 +729,7 @@ def keep_ltx(g, preset="quality"):
         return g
     pr = formats.PRESETS.get(preset, formats.PRESETS["quality"])
     if pr["engine"] == "h3":
-        m = _h3(g)
+        m = _h3(g, pr.get("pika", False) and pika_ready())
         g.add("FVKeep", model=m["model"], clip=m["clip"], vae=m["vae"], audio_vae=m["avae"])
         return g
     m = _ltx23(g) if pr["engine"] == "ltx23_r8" else _ltx25(g, dev=pr["engine"] == "ltx25_dev")
