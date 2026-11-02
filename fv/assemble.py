@@ -74,9 +74,12 @@ class ClipReader:
         return f[:, :, ::-1]  # RGB
 
 
-def letterbox(path: str, cv2, n: int = 5, dark: float = 18.0) -> tuple[int, int]:
-    """Rows of black bar at the top and bottom of a clip (the same in all n sampled frames),
-    (0, 0) when there are none; a bar must be at least 3% of the height to count."""
+def letterbox(path: str, cv2, n: int = 9, dark: float = 24.0) -> tuple[int, int]:
+    """Rows of black bar at the top and bottom of a clip, (0, 0) when there are none. A bar row
+    is black edge to edge (its 98th percentile under `dark`, so a dark scene with any light in
+    the row isn't one). The bar is the height most sampled frames share: MiniMax H3 B-roll can
+    letterbox itself a second into the clip. At least 1% of the height counts (1088-px H3 clips
+    get 20-px bars)."""
     cap = cv2.VideoCapture(path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     tops, bots = [], []
@@ -85,7 +88,7 @@ def letterbox(path: str, cv2, n: int = 5, dark: float = 18.0) -> tuple[int, int]
         ok, f = cap.read()
         if not ok:
             continue
-        rows = f.mean(axis=(1, 2))
+        rows = np.percentile(f.max(axis=2), 98, axis=1)
         h = len(rows)
         t = 0
         while t < h // 3 and rows[t] < dark:
@@ -99,9 +102,9 @@ def letterbox(path: str, cv2, n: int = 5, dark: float = 18.0) -> tuple[int, int]
     if not tops:
         return 0, 0
     h = int(cv2.VideoCapture(path).get(cv2.CAP_PROP_FRAME_HEIGHT) or 1)
-    t, b = min(tops), min(bots)
+    t, b = int(np.median(tops)), int(np.median(bots))
     # a letterbox has a bar at both ends, about the same height (a dark sky or floor has one)
-    if min(t, b) < 0.03 * h or abs(t - b) > 0.03 * h:
+    if min(t, b) < 0.01 * h or abs(t - b) > 0.02 * h:
         return 0, 0
     return t + 2, b + 2  # a couple of rows more: the bar edge is soft
 

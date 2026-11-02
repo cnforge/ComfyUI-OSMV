@@ -46,12 +46,13 @@ MOMENT_MOTION = ("Candid medium shot of {who}, {action}: natural, unhurried move
                  "No text appears.")
 MOMENT_FALLBACK = ["adjusting something with careful hands", "tidying up after a long day", "stretching and looking around",
                    "checking their work closely", "straightening their clothes", "walking slowly through the room"]  # no mirror: a reflection is a second person
-# no "cinematic": in text to video it brings letterbox bars with it
+# no "cinematic": in text to video it brings letterbox bars with it. Nor "black bars" in the prompt
+# itself: MiniMax H3 has no negative prompt, and naming the bars there letterboxed its cutaways
 # text-to-video cutaways look AI-made, so cutaways start from a Krea 2 still (the realism model
 # the portraits use) written as a real photograph, and LTX moves it
 STILL = " Nobody in the picture. No text, no lettering."  # + casting.REALISM_SCENE (finish_prompt)
 MOTION = (" The camera moves slowly and smoothly; gentle natural motion in the scene. Nobody is in the frame. "
-          "No black bars. No text appears.")
+          "The picture fills the whole frame, edge to edge. No text appears.")
 NEGATIVE = ("text, lettering, subtitles, watermark, logo, singing, talking, microphone, blurry, low quality, "
             "flicker, deformed hands, distorted faces, letterbox, black bars, widescreen bars, frame border, "
             "picture in picture, frame within a frame, shrinking picture, zoom out to black, black border")
@@ -295,7 +296,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             img = " ".join((MOMENT_STILL.format(**d) + " " + era).split())
             img_still = finish_prompt(img, "medium", camera=camera)
             motion = period_background(" ".join(MOMENT_MOTION.format(who=d["who"], action=d["action"]).split()) + " " +
-                                       f"{d['light']}. Setting: {d['place']}. Photorealistic, full frame with no black bars.",
+                                       f"{d['light']}. Setting: {d['place']}. Photorealistic, the picture fills the whole frame, edge to edge.",
                                        pera)
             if stills:
                 keys.append(graphs.krea2_portrait(prompt=img_still, seed=seed, prefix=f"{rel}/k{rid:03d}R",
@@ -317,7 +318,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             img = " ".join((DANCE_STILL.format(**d) + " " + era).split())
             img_still = finish_prompt(img, "medium", camera=camera)
             motion = " ".join(DANCE_MOTION.format(who=d["who"]).split()) + " " + \
-                f"{d['light']}. Setting: {d['place']}. Photorealistic, full frame with no black bars, natural colour, " \
+                f"{d['light']}. Setting: {d['place']}. Photorealistic, the picture fills the whole frame, edge to edge, natural colour, " \
                 "subtle film grain."
             motion = period_background(motion, pera)
             if stills:
