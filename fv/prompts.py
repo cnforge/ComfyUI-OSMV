@@ -37,11 +37,12 @@ def _sentences(text: str) -> list[str]:
 
 
 def h3(text: str, *, seconds: float, words: str = "", language: str = "English", sung: bool = True,
-       look: bool = False, broll: bool = False, audio: str = "vocal") -> str:
+       look: bool = False, broll: bool = False, empty: bool = False, audio: str = "vocal") -> str:
     """A MiniMax H3 full-reference prompt for one clip.
     text: the clip's plain description; seconds: its length; words: the lyrics sung in it;
     look: the clip follows the lead's clip (<Video 1>) for pose and timing; broll: a cutaway
-    (nobody sings); audio: what <Audio 1> is ("vocal", "drums" or "" for none)."""
+    (nobody sings); empty: a cutaway of a place with nobody in it; audio: what <Audio 1> is
+    ("vocal", "drums" or "" for none)."""
     sub = "<Subject 1>"
     body = _PERSON.sub(sub, " ".join(text.split()))
     sung = sung and not broll
@@ -49,7 +50,10 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
     if words and words[-1] not in ".!?":
         words += "."  # the guide ends every <d> line on its punctuation
     # subject_definitions
-    defs = [f"{sub} is what <Picture 1> shows: its people, place and light." if broll else
+    # an empty place is said as a place: any face, clothes or candid moment in the prompt and H3
+    # walks a stranger into the shot
+    defs = [f"{sub} is the place in <Picture 1>: its objects, surfaces and light." if empty else
+            f"{sub} is what <Picture 1> shows: its people, place and light." if broll else
             f"{sub} is the person in <Picture 1>: their face, hair, clothes and surroundings.",
             "<Picture 1> is the first frame of the target video."]
     if look:
@@ -61,7 +65,9 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
         defs.append("<Audio 1> is the drum track of the song for this clip.")
     # summary
     kinds = ["image reference"] + (["video reference"] if look else []) + (["audio reuse"] if audio else [])
-    if broll:
+    if empty:
+        act = f"the camera moves slowly through {sub}, and only the light and the small details in it move"
+    elif broll:
         act = f"{sub} is caught in a candid moment, not singing"
     elif sung:
         act = f"{sub} sings the words of <Audio 1> in perfect lip sync"
@@ -70,7 +76,9 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
     summary = (f"[{' + '.join(kinds)}] A {seconds:.2f}-second music-video shot that starts exactly on <Picture 1>: "
                f"{act}." + (" <Audio 1> is reused 1:1 as the complete soundtrack." if audio else ""))
     # retention_analysis
-    ret = [f"{sub} (appears in [Shot 1]): fully_preserved - the face, identity, hair, clothing, lighting and "
+    ret = [f"{sub} (appears in [Shot 1]): fully_preserved - the objects, surfaces, lighting and layout of "
+           f"<Picture 1> stay the same throughout." if empty else
+           f"{sub} (appears in [Shot 1]): fully_preserved - the face, identity, hair, clothing, lighting and "
            f"setting of <Picture 1> stay the same throughout.",
            "<Picture 1>: fully_preserved - it is the frame at 0.00 seconds."]
     if look:
@@ -90,15 +98,16 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
     elif not broll:
         lines.append(f"{sub} does not sing: the lips stay closed for the whole {seconds:.2f} seconds while the head "
                      f"nods with the beat.")
-    lines.append("One continuous shot from the first frame to the last, with no cuts: the same person in the same "
-                 "place, filmed by the same camera.")
+    lines.append("One continuous shot from the first frame to the last, with no cuts: " +
+                 ("the same place, filmed by the same camera." if empty else
+                  "the same person in the same place, filmed by the same camera."))
     detail = " ".join(lines)
     if audio == "vocal":
         sound = "The soundtrack is <Audio 1> copied unchanged: the lead vocal on its own, with no added sound effects."
     elif audio == "drums":
         sound = "The soundtrack is <Audio 1> copied unchanged: the song's drums, with no added sound effects."
     else:
-        sound = "Quiet room tone, with soft movement sounds."
+        sound = "Quiet room tone." if empty else "Quiet room tone, with soft movement sounds."
     return "\n\n".join([
         "subject_definitions:\n" + "\n".join(defs),
         "summary:\n" + summary,

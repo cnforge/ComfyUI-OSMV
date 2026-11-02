@@ -240,11 +240,13 @@ def kind_for(why: str, style: str) -> str:
     return "dance" if why == "instrumental gap" else "moment"  # mix
 
 
-def _for_engine(preset: str, text: str, frames: int, fps: float, drums: bool) -> str:
-    """A cutaway's prompt in its engine's structure (fv/prompts.py): nobody sings in it."""
+def _for_engine(preset: str, text: str, frames: int, fps: float, drums: bool, empty: bool = False) -> str:
+    """A cutaway's prompt in its engine's structure (fv/prompts.py): nobody sings in it; empty: a
+    place with nobody in it."""
     from . import prompts
     if formats.engine_of(preset) == "h3":
-        return prompts.h3(text, seconds=frames / float(fps), broll=True, sung=False, audio="drums" if drums else "")
+        return prompts.h3(text, seconds=frames / float(fps), broll=True, empty=empty, sung=False,
+                          audio="drums" if drums else "")
     return prompts.ltx25(text, sung=False)
 
 
@@ -341,7 +343,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
                                                   size1=s1, size2=s2).nodes)
             clips.append(graphs.ltx_render(preset=preset, fmt=fmt, size=formats.render_size(fmt, preset, p), key_path=key if stills else None,
                                            prompt=_for_engine(preset, period_background(img + STILL + MOTION, pera),
-                                                              frames, rfps, False),
+                                                              frames, rfps, False, empty=True),
                                            negative=NEGATIVE_EMPTY, frames=frames,
                                            seed=seed, prefix=f"{rel}/r{rid:03d}R").nodes)
         r = {"id": rid, "shot": s["index"], "role": "R", "performer": -1, "t_start": round(t_start, 4),
