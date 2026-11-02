@@ -38,6 +38,8 @@
  "ltx25_audio_vae": "ltx-2.5-audio-vae-bf16.safetensors",
  "ltx25_te": "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
  "ltx25_upscaler": "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
+ "ltx25_dev_unet": "ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors",
+ "ltx25_distill_lora": "ltx-2.5-22b-distilled-lora-450-bf16.safetensors",
  "ltx_union_lora": "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
  "h3_unet": "fasth3_omniref_8step_pruned_int8_convrot.safetensors",
  "h3_te": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",

@@ -25,12 +25,13 @@ _H3 = {"16:9": ((1920, 1088), (1024, 576)), "9:16": ((1088, 1920), (576, 1024)),
 H3_NATIVE = {"16:9": (1344, 768), "9:16": (768, 1344), "1:1": (768, 768)}
 for _k, _f in FORMATS.items():
     _f["fast_voice"] = _f["fast"]  # older runs' singing-at-fast preset
+    _f["max"] = _f["quality"]  # Max: Quality's size on LTX-2.5's dev model
     _f["h3"], _f["h3_fast"] = _H3[_k]
 # what Quality rendered at before 1080p: runs planned then (no "render_wh" in their plan) are
 # cut and re-shot at these sizes
-LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "h3": (1344, 768)},
-                "9:16": {"quality": (768, 1280), "h3": (768, 1344)},
-                "1:1": {"quality": (1024, 1024), "h3": (768, 768)}}
+LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "max": (1280, 768), "h3": (1344, 768)},
+                "9:16": {"quality": (768, 1280), "max": (768, 1280), "h3": (768, 1344)},
+                "1:1": {"quality": (1024, 1024), "max": (1024, 1024), "h3": (768, 768)}}
 HIRES_MIN_GB = 40  # 1080p Quality needs this much GPU memory; smaller cards render at LEGACY_SIZES
 FORMAT_NAMES = list(FORMATS)  # 16:9 first: the default
 
@@ -40,6 +41,9 @@ PRESETS = {
     # small nudge; Take QC measures each take with SyncNet and uses its own offset where it can.
     "quality": {"stages": 2, "fps": 25, "engine": "ltx25_distilled", "sync_delay": 0.05},
     "fast": {"stages": 2, "fps": 25, "engine": "ltx25_distilled", "sync_delay": 0.05},
+    # Max: stage 1 on LTX-2.5's full dev model (20 steps at cfg 4), the upscale stage on dev with
+    # the distilled LoRA (LTX's own dev recipe). Cleaner faces and motion, about 4x Quality's time.
+    "max": {"stages": 2, "fps": 25, "engine": "ltx25_dev", "sync_delay": 0.05},
     # MiniMax H3 (fv/h3.py): one pass of the 8-step reference model at 24 fps, the clip's vocal
     # copied 1:1 as its soundtrack. Its lip offset isn't known yet: SyncNet measures every take.
     "h3": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0},
@@ -49,15 +53,15 @@ PRESETS = {
 }
 LEGACY_SYNC = {"quality": 0.16, "fast_voice": 0.16}  # LTX-2.3's lips led by 0.22-0.26 s
 ENGINES = {"ltx25": "LTX-2.5", "h3": "MiniMax H3"}
-PRESET_NAMES = ["quality", "fast"]  # what users pick; with the engine they make the render preset
+PRESET_NAMES = ["quality", "fast", "max"]  # what users pick; with the engine they make the render preset
 
 
 def effective_preset(mode: str, preset: str, engine: str = "ltx25") -> str:
-    """The render preset for a speed (quality / fast) on an engine (ltx25 / h3). Motion runs
-    (pose-guided dance clips) stay on LTX-2.5."""
+    """The render preset for a speed (max / quality / fast) on an engine (ltx25 / h3). Motion runs
+    (pose-guided dance clips) stay on LTX-2.5. H3 has no Max: its full model looked no better."""
     if engine == "h3" and mode == "voice":
-        return "h3" if preset == "quality" else "h3_fast"
-    return preset if preset in ("quality", "fast") else "quality"
+        return "h3_fast" if preset == "fast" else "h3"
+    return preset if preset in ("quality", "fast", "max") else "quality"
 
 
 def engine_of(preset: str) -> str:

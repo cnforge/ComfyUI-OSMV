@@ -70,6 +70,7 @@ RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", 
             "ltx25_audio_vae", "ltx25_te", "ltx25_upscaler", "ltx_union_lora",  # what a default voice run loads (looks too)
             "ltx23_ckpt", "ltx23_te")  # LTX-2.3's Gemma 3: the language model of the vision check and the World
 H3_KEYS = ("h3_unet", "h3_te", "h3_vae", "h3_audio_vae")  # the singer clips on MiniMax H3
+MAX_KEYS = ("ltx25_dev_unet", "ltx25_distill_lora")  # the Max preset (LTX-2.5 dev)
 ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
                "klein_unet", "klein_te", "klein_vae")      # and its looks
 
@@ -137,9 +138,10 @@ def missing_nodes() -> list:
     return sorted({p for n, p in RUN_NODES.items() if n not in comfy_nodes.NODE_CLASS_MAPPINGS})
 
 
-def not_ready(requested: str | None = "auto", artist: bool = False, engine: str = "ltx25") -> str:
-    """Why a render with this model set (and a character photo, and an engine) can't run here
-    ('' when it can)."""
+def not_ready(requested: str | None = "auto", artist: bool = False, engine: str = "ltx25",
+              preset: str = "quality") -> str:
+    """Why a render with this model set (and a character photo, an engine and a preset) can't run
+    here ('' when it can)."""
     name = pick_models(requested)
     files, packs = missing_files(name), missing_nodes()
     if artist:
@@ -148,6 +150,8 @@ def not_ready(requested: str | None = "auto", artist: bool = False, engine: str 
         files += missing_files(name, keys=H3_KEYS)
         if not _has_node("MiniMaxH3ReferenceToVideo"):
             packs = packs + ["ComfyUI's MiniMax H3 nodes (update ComfyUI)"]
+    elif preset == "max":
+        files += missing_files(name, keys=MAX_KEYS)
     why = []
     if files:
         why.append(f"{'a character run' if artist else 'the ' + ('full' if name == 'full' else '24 GB') + ' model set'}"
@@ -167,6 +171,7 @@ def models_report() -> dict:
             "missing": {n: missing_files(n, idx) for n in MODEL_SETS}, "missing_packs": missing_nodes(),
             "missing_character": missing_files("24gb", idx, ARTIST_KEYS),  # the same files in both sets
             "missing_h3": {n: missing_files(n, idx, H3_KEYS) for n in MODEL_SETS},
+            "missing_max": {n: missing_files(n, idx, MAX_KEYS) for n in MODEL_SETS},
             "missing_checks": missing_checks()}
 
 
@@ -216,6 +221,8 @@ R8_S2 = "0.909, 0.880, 0.840, 0.780, 0.700, 0.600, 0.500, 0.400, 0.250, 0.100, 0
 R8_S3 = "0.909375, 0.725, 0.421875, 0.0"
 D25_S1 = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
 D25_S2 = "0.909375, 0.725, 0.421875, 0.0"
+# Max (LTX-2.5 dev): stage-1 steps and CFG, and the distilled LoRA's strength on the upscale stage
+DEV_STEPS, DEV_CFG, DEV_LORA = 20, 4.0, 0.6
 
 
 class Graph:
@@ -333,8 +340,9 @@ def _ltx23(g, union=False):
     return dict(model=model, dsf=dsf, vae=O(ck, 2), avae=O(avae), clip=O(clip), ups=O(ups))
 
 
-def _ltx25(g, union=False):
-    unet = g.add("UNETLoader", unet_name=M["ltx25_unet"], weight_dtype="default")
+def _ltx25(g, union=False, dev=False):
+    """dev: the full dev model (the Max preset) in place of the distilled one."""
+    unet = g.add("UNETLoader", unet_name=M["ltx25_dev_unet" if dev else "ltx25_unet"], weight_dtype="default")
     model, dsf = _ram_backups(g, O(unet)), 1.0
     if union:
         lo = g.add("LTXICLoRALoaderModelOnly", model=model, lora_name=M["ltx_union_lora"], strength_model=1.0)
@@ -386,7 +394,8 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     sizes = formats.stage_sizes(fmt, preset, size)
     g = Graph()
     union = guide_video is not None
-    m = _ltx23(g, union) if pr["engine"] == "ltx23_r8" else _ltx25(g, union)
+    dev = pr["engine"] == "ltx25_dev"
+    m = _ltx23(g, union) if pr["engine"] == "ltx23_r8" else _ltx25(g, union, dev)
     if continuity and CONTINUITY not in prompt:
         prompt = f"{prompt.rstrip()} {CONTINUITY}"
 
@@ -441,8 +450,12 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
                         audio_vae=m["avae"]))
     # stage 1
     av = g.add("LTXVConcatAVLatent", video_latent=lat_ref, audio_latent=a_ref)
-    guider = g.add("CFGGuider", model=m["model"], positive=p_ref, negative=n_ref, cfg=1.0)
-    if pr["engine"] == "ltx23_r8":
+    guider = g.add("CFGGuider", model=m["model"], positive=p_ref, negative=n_ref, cfg=DEV_CFG if dev else 1.0)
+    if dev:  # LTX's dev recipe: its own scheduler, real CFG (so the negative prompt counts), res_2s
+        sig = g.add("LTXVScheduler", steps=DEV_STEPS, max_shift=2.05, base_shift=0.95, stretch=True,
+                    terminal=0.1, latent=O(av))
+        smp = g.add("KSamplerSelect", sampler_name="res_2s")
+    elif pr["engine"] == "ltx23_r8":
         sig = g.add("LTXVScheduler", steps=int(pr.get("steps1", 30)), max_shift=2.05, base_shift=0.95, stretch=True,
                     terminal=0.1, latent=O(av))
         smp = g.add("KSamplerSelect", sampler_name="res_2s")
@@ -456,7 +469,11 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     vlat, cpos, cneg = O(crop, 2), O(crop, 0), O(crop, 1)
     # the upscale stages: LTX-2.3 runs the quality schedule's last (stages - 1) of them
     plan = ([("dpmpp_sde", R8_S2), ("dpmpp_2m_sde", R8_S3)][-(pr["stages"] - 1):] if pr["engine"] == "ltx23_r8"
-            else [("euler_ancestral", D25_S2)])
+            else [("res_2s" if dev else "euler_ancestral", D25_S2)])
+    smodel = m["model"]
+    if dev:  # the upscale stage: dev with the distilled LoRA, at cfg 1
+        smodel = O(g.add("LoraLoaderModelOnly", model=smodel, lora_name=M["ltx25_distill_lora"],
+                         strength_model=DEV_LORA))
     for i, (sname, sigs) in enumerate(plan, start=1):
         up = g.add("LTXVLatentUpsampler", samples=vlat, upscale_model=m["ups"], vae=m["vae"])
         li = O(g.add("LTXVImgToVideoInplace", vae=m["vae"], image=keys[i], latent=O(up), strength=ks[i],
@@ -465,7 +482,7 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
         if extra:  # pin the later keyframes again at this stage's size, crop them after
             spos, sneg, li = pin(i, cpos, cneg, li)
         av = g.add("LTXVConcatAVLatent", video_latent=li, audio_latent=a_ref if audio_path else O(sep, 1))
-        gd2 = g.add("CFGGuider", model=m["model"], positive=spos, negative=sneg, cfg=1.0)
+        gd2 = g.add("CFGGuider", model=smodel, positive=spos, negative=sneg, cfg=1.0)
         s = g.add("SamplerCustomAdvanced", noise=O(g.add("RandomNoise", noise_seed=12345 + seed % 1000)),
                   guider=O(gd2), sampler=O(g.add("KSamplerSelect", sampler_name=sname)),
                   sigmas=O(g.add("ManualSigmas", sigmas=sigs)), latent_image=O(av))
@@ -693,7 +710,7 @@ def keep_ltx(g, preset="quality"):
         m = _h3(g)
         g.add("FVKeep", model=m["model"], clip=m["clip"], vae=m["vae"], audio_vae=m["avae"])
         return g
-    m = _ltx23(g) if pr["engine"] == "ltx23_r8" else _ltx25(g)
+    m = _ltx23(g) if pr["engine"] == "ltx23_r8" else _ltx25(g, dev=pr["engine"] == "ltx25_dev")
     g.add("FVKeep", model=m["model"], clip=m["clip"], vae=m["vae"], audio_vae=m["avae"], upscaler=m["ups"])
     return g
 

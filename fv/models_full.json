@@ -7,6 +7,7 @@
  "ltx23_te": "gemma_3_12B_it.safetensors",
  "ltx25_unet": "ltx-2.5-22b-distilled-transformer-bf16.safetensors",
  "ltx25_te": "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors",
+ "ltx25_dev_unet": "ltx-2.5-22b-dev-transformer-bf16.safetensors",
  "h3_unet": "fasth3_omniref_8step_pruned_bf16.safetensors",
  "h3_te": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
  "h3_vae": "minimax_h3_video_vae_fp16.safetensors"

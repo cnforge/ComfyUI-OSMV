@@ -179,7 +179,7 @@ Some things that help:
 | Length and start | seconds (0 = the whole song); a start time, or auto | 30 s from the strongest stretch |
 | Format | 16:9 (1920×1080), 9:16 (1080×1920), 1:1 (1080×1080) | 16:9 |
 | Engine | ltx-2.5 (LTX-2.5 distilled, lip sync from the vocal), minimax-h3 (MiniMax H3 reference mode: the portrait, the vocal copied 1:1, the lyrics from Whisper; 24 fps, at least 4.5 s a clip; slower) | ltx-2.5 |
-| Quality | quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
+| Quality | max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
 | Cast order | as written, mixed | as written |
@@ -204,6 +204,14 @@ and `minimax_h3_latent_upscaler_3d_fp32.pth` in `models/latent_upscale_models`, 
 It takes about 60% longer than a native-size clip. Without them, H3 quality renders at its
 native size and is scaled up. On a GPU with less than 40 GB, quality keeps the earlier sizes
 (1280×768 on LTX-2.5, 1344×768 on H3) to fit in memory.
+
+Max renders LTX-2.5 clips with its full dev model instead of the 8-step distilled one: stage 1
+runs 20 steps at cfg 4 (so the negative prompt counts), and the upscale stage runs dev with the
+distilled LoRA at 0.6, LTX's own dev recipe. Faces and motion come out cleaner, at about 4× the
+time of Quality (a 4.5 s clip: about 3 minutes instead of 45 seconds on an RTX PRO 6000). It
+needs `ltx-2.5-22b-dev-transformer` (bf16 in the full set, int8 in the 24 GB set) and
+`ltx-2.5-22b-distilled-lora-450-bf16` from [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5).
+H3 has no Max: its unpruned model, at twice the time, looked no different.
 
 MiniMax H3 needs ComfyUI's MiniMax H3 nodes (a recent ComfyUI), its reference model, the Qwen3-VL
 32B H3 text encoder and the H3 video and audio VAEs (`h3_*` in `fv/models.json`); its lyrics come
@@ -385,7 +393,7 @@ Models that only other packs and modes use (a default run never loads them):
 | LTX-2.3 IC-LoRA Union Control (ref0.5) | Pose-matched looks; motion mode | LTX-2 Community License | [Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control) |
 | DWPose and YOLOX-L (TorchScript) | Pose guides for looks and motion mode | Apache-2.0 | Downloaded by [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux), which these packs and modes also need |
 | Qwen-Image 2.1, its VAE and the Qwen3-VL 8B text encoder | Portraits in the `artist` pack | Check the licence on the model page before commercial use | [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) |
-| LTX-2.5 22B distilled, its VAEs, upscaler and Gemma 4 text encoder | Motion mode at the `fast` preset | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| LTX-2.5 22B distilled, its VAEs, upscaler and Gemma 4 text encoder; the 22B dev model and distilled LoRA (Max) | Singer clips on LTX-2.5; motion mode at the `fast` preset | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
 
 File names are set in `fv/models.json` and `fv/models_full.json`.
 

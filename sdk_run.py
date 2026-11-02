@@ -121,7 +121,7 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=30.0, help="length of the video; 0 = the whole song")
     ap.add_argument("--start", type=float, default=-1.0, help="song time to start at; -1 = the strongest stretch")
     ap.add_argument("--format", default="16:9", choices=["16:9", "9:16", "1:1"])
-    ap.add_argument("--preset", default="quality", choices=["quality", "fast"])
+    ap.add_argument("--preset", default="quality", choices=["quality", "fast", "max"])
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--fx", default="subtle", choices=["none", "subtle", "intense"],
                     help="audio-reactive effects (flash, zoom punch, glow, colour split)")

@@ -286,7 +286,7 @@ def _estimate(b: dict) -> dict:
     total = sum(x["s"] for x in parts)
     return {"total_s": int(total), "parts": parts, "shots": len(p["shots"]), "need": need,
             "world_cached": bool(bible) and have >= need, "window": [round(p["song_t0"], 2), round(p["song_t1"], 2)],
-            "render_min": round(6 + (2.5 if b.get("preset", "quality") == "quality" else 1.0) * win)}
+            "render_min": round(6 + {"max": 10.0, "quality": 2.5}.get(b.get("preset", "quality"), 1.0) * win)}
 
 
 def _project(d: str) -> str:
@@ -574,7 +574,7 @@ def _notes(d: str, p: dict, label_of: dict, done: bool = False) -> list[dict]:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = {"quality": 2.5, "h3": 5.0, "h3_fast": 2.0}.get(p.get("preset"), 1.0)
+    per = {"max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0}.get(p.get("preset"), 1.0)
     return 6 + per * dur
 
 
@@ -1338,7 +1338,8 @@ async def _api(request: web.Request, route: str) -> web.Response:
             if body.get("render"):  # refuse now, not after minutes of planning
                 why = await _blocking(lambda: _fv("graphs").not_ready(body.get("models") or "auto",
                                                                       artist=bool(_characters(body)),
-                                                                      engine=_engine(body)))
+                                                                      engine=_engine(body),
+                                                                      preset=body.get("preset") or "quality"))
                 if why:
                     return web.json_response({"error": f"Can't render on this ComfyUI yet: {why}."}, status=400)
             try:
