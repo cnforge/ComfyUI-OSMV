@@ -504,6 +504,53 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     return g
 
 
+# ------------------------------------------------------------------ detail refine (LTX-2.5 IC-LoRA)
+# Lightricks' Refine-Details IC-LoRA: the finished clip as a frame-aligned guide, re-rendered on the
+# distilled model in overlapping 1024x576 tiles fused at every step (LTXVTiledFusionSampler), as in
+# ComfyUI-LTXVideo's LTX-2.5_V2V_TiledFusion_Upscale workflow. Framing, colour and motion stay; the
+# texture, edges and grain come back that the latent upscale softened. The prompt is about the
+# rendering only: every tile gets all of it, so a named subject would turn up in every tile.
+REFINE_SIGMAS = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+REFINE_PROMPT = ("sharp photographic detail, crisp natural texture, fine surface detail, clean edges, "
+                 "natural film grain, high resolution footage")
+REFINE_NEG = "blurry, soft, plastic, smeared detail, oversharpened halos, warped faces"
+REFINE_WINDOW = 97  # frames per temporal window (the LoRA's training length; guide and sampler agree)
+
+
+def refine_ready() -> bool:
+    return bool(M.get("ltx25_refine_lora")) and _has_node("LTXVTiledFusionSampler") and \
+        _has_node("LTXAddVideoICLoRAGuide")
+
+
+def refine_clip(*, video_path, size, frames, fps, seed, prefix):
+    """A clip re-rendered with the Refine-Details IC-LoRA at its own size (size: (w, h), multiples of
+    32; frames: 8n+1, as LTX renders them)."""
+    w, h = size
+    g = Graph()
+    m = _ltx25(g)
+    lo = g.add("LTXICLoRALoaderModelOnly", model=m["model"], lora_name=M["ltx25_refine_lora"], strength_model=1.0)
+    src = g.add("FVLoadVideoPath", path=video_path, width=w, height=h, frame_cap=frames, start_seconds=0.0,
+                force_fps=0.0)
+    pos = g.add("CLIPTextEncode", clip=m["clip"], text=REFINE_PROMPT)
+    neg = g.add("CLIPTextEncode", clip=m["clip"], text=REFINE_NEG)
+    cond = g.add("LTXVConditioning", positive=O(pos), negative=O(neg), frame_rate=float(fps))
+    lat = g.add("EmptyLTXVLatentVideo", width=w, height=h, length=frames, batch_size=1)
+    gd = g.add("LTXAddVideoICLoRAGuide", positive=O(cond, 0), negative=O(cond, 1), vae=m["vae"], latent=O(lat),
+               image=O(src), frame_idx=0, strength=1.0, latent_downscale_factor=1.0, crop="disabled",
+               use_tiled_encode=False, tile_size=256, tile_overlap=64, use_streaming=frames > REFINE_WINDOW,
+               tile_frames=REFINE_WINDOW)
+    tw, th = (1024, 576) if w >= h else (576, 1024)
+    s = g.add("LTXVTiledFusionSampler", model=O(lo), positive=O(gd, 0), negative=O(gd, 1), latents=O(gd, 2),
+              sigmas=O(g.add("ManualSigmas", sigmas=REFINE_SIGMAS)),
+              sampler=O(g.add("KSamplerSelect", sampler_name="euler")), seed=int(seed), cfg=1.0,
+              tile_width=min(tw, w), tile_height=min(th, h), overlap_frac=0.5, blend_var=0.05, grid_cycle=1,
+              tile_frames=REFINE_WINDOW if frames > REFINE_WINDOW else 0, vae=m["vae"])
+    dec = g.add("VAEDecodeTiled", samples=O(s), vae=m["vae"], tile_size=1024, overlap=128,
+                temporal_size=256, temporal_overlap=32)
+    _save_video(g, O(dec), fps, prefix)
+    return g
+
+
 # ------------------------------------------------------------------ MiniMax H3
 H3_STEPS = 8          # the fast omni-reference model's schedule
 H3_LIFT_AT = 6        # SelfLift: steps at the native size before the lift (the last 2 at full size)

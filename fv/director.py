@@ -149,7 +149,8 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
            broll_style: str = "mix", staged: bool = True,
            look_groups: bool = False, cuts: dict | None = None, audio_fx: str = "",
            cast_order: str = "as written", crowd: str = "auto", log=print, fps: float = 0.0, resolution: int = 1080,
-           lip_repair: bool = False, models: str = "auto", engine: str = "ltx25") -> dict:  # lip_repair: accepted and ignored, so older callers
+           lip_repair: bool = False, models: str = "auto", engine: str = "ltx25", direction: str = "",
+           refine: bool = False) -> dict:  # lip_repair: accepted and ignored, so older callers
     # (an old nodes.py still loaded in a ComfyUI that has not restarted) still work
     """staged (voice runs queued here, with QC): the 4-load order. Krea makes every portrait and
     the b-roll candidate stills; LTX makes every singer clip and the b-roll clips, and QC
@@ -157,6 +158,9 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     the final singer takes and LTX the look clips (QC passes and Klein edits keep LTX loaded,
     FVKeep). Grouping by job type instead can spend 65 of 155 minutes on 12 model loads; this
     order loads 4 times and never re-makes a look because its singer was re-rolled.
+    direction: notes per part of the song (fv/direction.py), added to each shot's prompts.
+    refine: after the last take check, every clip in the cut is re-rendered with LTX-2.5's
+    Refine-Details IC-LoRA (_refine_jobs) before the edit; LTX-2.5 runs at Quality or Max only.
     look_groups (staged, experimental, off by default): each drop group's looks are one LTX clip
     that switches person on the beat (the lead's pose guide, each look's keyframe pinned at its
     cut) instead of one clip per look; the edit reads each look from it. It is much faster when
@@ -313,6 +317,19 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                 log(f"[OneShotMV] crowd dress skipped ({e})")
         p["cast_order"], p["crowd"] = (cast_order or "as written"), pk["casting"]["crowd_mode"]
         cast = casting.cast_voice(pk, p["performers"], seed, sizes, fmt=fmt, leads=leads, phases=phases)
+        # each shot's notes go on its portrait; the clip animates that portrait, and its prompt
+        # stays the performance alone (notes there cost lip sync, fv/direction.py)
+        if direction and direction.strip():
+            from . import direction as directions
+            directions.assign(p, direction)
+            shot_of = {s["index"]: s for s in p["shots"] if "index" in s}
+            done = set()
+            for r in p["renders"]:
+                sh = shot_of.get(r["shot"], {})
+                if r["role"] in ("A", "B") and sh.get("direction") and r["performer"] not in done:
+                    done.add(r["performer"])
+                    cast[r["performer"]]["portrait"] = directions.still(cast[r["performer"]]["portrait"], sh["direction"])
+            log("[OneShotMV] direction: " + " | ".join(directions.summary(p)))
         # how much is sung under each lead (before the portraits: an instrumental lead's still has
         # its mouth closed). Dense vocals (rap) get the articulation prompt (it lifted lip sync on
         # dense shots), (almost) none the not-singing one.
@@ -489,6 +506,11 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                                        if n in p["critic"]["later"]]
         p["timing"] = {"queued": _dt.datetime.now().isoformat(timespec="seconds")}
     p["models"] = model_set
+    if refine and p.get("engine") != "h3" and label != "fast" and use_qc:
+        if graphs.refine_ready():
+            p["refine"] = True
+        else:
+            log("[OneShotMV] refine skipped: needs the Refine-Details LoRA and ComfyUI-LTXVideo's tiled fusion nodes")
     emap = _energy_map(p, pk)  # kept in the plan too (p["energy_map"])
     json.dump(p, open(os.path.join(run_dir, "plan.json"), "w", encoding="utf-8"), indent=1)
     for i, (name, g) in enumerate(jobs):
@@ -577,6 +599,10 @@ def plan_preview(p: dict, queued: bool = True) -> str:
     if th.get("camera"):
         lines.append("Camera: " + th["camera"])
     lines.append(f"Cast order: {p.get('cast_order', 'as written')}   Crowd behind singers: {p.get('crowd', 'auto')}")
+    if p.get("direction"):
+        from . import direction as directions
+        lines.append("Direction:")
+        lines += ["  " + x for x in directions.summary(p)]
     lines.append("")
     used = set()
     for s in p.get("shots", []):
@@ -1342,6 +1368,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
                                                                 then_assemble=then_assemble, stage="looks",
                                                                 keep=keep).nodes], server_url())
         elif queue and then_assemble and queue_rerolls:
+            post = post + _refine_jobs(p, run_dir, log=log)  # the clips are final: refine them for the cut
             queued = queue_chain_front(post + [graphs.free_memory("before assembly").nodes,
                                                graphs.assemble(run_dir=run_dir, prefix=p.get("run_rel", "")).nodes],
                                        server_url())
@@ -1368,6 +1395,32 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
     log(f"[OneShotMV] {msg}")
     return {"message": msg, "report": report, "queued": queued, "bundle": bundle, "final": last,
             "rerolls": len(rerolls)}
+
+
+def _refine_jobs(p: dict, run_dir: str, log=print) -> list[dict]:
+    """Runs with refine on: a Refine-Details pass (graphs.refine_clip) over every clip the cut uses,
+    once its take is final. Each writes r..._refined_00001_.mp4 and is noted on its render as
+    r["refined"] = {"path", "from"}; the edit takes it while the render's take is still "from"
+    (a later Studio re-shoot replaces the take and the edit goes back to the plain one)."""
+    if not p.get("refine") or p.get("engine") == "h3":
+        return []
+    w, h = p.get("render_wh") or formats.render_size(p["format"], p["preset"], p)
+    kept = {s.get("broll") for s in p.get("shots", []) if s.get("broll") is not None}
+    rel, jobs = p.get("run_rel", ""), []
+    for r in p["renders"]:
+        if r.get("unusable") or r.get("unused") or (r.get("broll_candidate") and r["id"] not in kept):
+            continue
+        src = r.get("path", "")
+        if not src or (r.get("refined") or {}).get("from") == src:
+            continue
+        name = f"r{r['id']:03d}{r['role']}_refined"
+        jobs.append(graphs.refine_clip(video_path=src, size=(w, h), frames=r["frames"], fps=r["fps"],
+                                       seed=p.get("seed", 1) + r["id"], prefix=f"{rel}/{name}").nodes)
+        r["refined"] = {"path": os.path.join(run_dir, f"{name}_00001_.mp4"), "from": src}
+    if jobs:
+        p.setdefault("timing", {})["refine"] = _dt.datetime.now().isoformat(timespec="seconds")
+        log(f"[OneShotMV] refine: {len(jobs)} clips queued for the Refine-Details pass")
+    return jobs
 
 
 # ------------------------------------------------------------------ vision check of the stills

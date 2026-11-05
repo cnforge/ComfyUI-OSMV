@@ -221,6 +221,10 @@ def assemble(run_dir: str, *, fx_intensity: float = 1.0, do_finish: bool = True,
     renders = {r["id"]: r for r in plan["renders"]}
 
     def clip_path(r):
+        # the Refine-Details pass of the take (director._refine_jobs), while that take is still the one
+        rf = r.get("refined") or {}
+        if rf.get("from") == r.get("path") and os.path.isfile(rf.get("path", "")):
+            return rf["path"]
         # a pickup (Studio re-shoot) whose new take didn't render falls back to the take it replaced
         pth = r.get("path", "")
         if r.get("path_before") and not os.path.exists(pth) and os.path.exists(r["path_before"]):

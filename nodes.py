@@ -17,9 +17,10 @@ from .fv import theme as fv_theme
 from .fv import broll as fv_broll
 from .fv import identity as fv_identity
 from .fv import critic as fv_critic
+from .fv import direction as fv_direction
 
 CATEGORY = "OneShot MV"
-_MODULES = [beat, dsplan, formats, casting, faces, plan, pose, graphs, fv_theme, fv_broll, fv_identity, fv_critic, stems, audiofx, fx, finish, export, lipsync, qc, fv_assemble, director]
+_MODULES = [beat, dsplan, formats, casting, faces, plan, pose, graphs, fv_theme, fv_direction, fv_broll, fv_identity, fv_critic, stems, audiofx, fx, finish, export, lipsync, qc, fv_assemble, director]
 
 
 def _reload():
@@ -231,6 +232,16 @@ class FVDirector:
                                  "are, what they wear, the places, the light and the colour grade; the pack still "
                                  "sets the edit. Empty = the pack's own looks. Expanded once by Gemma 3 (the "
                                  "LTX-2.3 text encoder) and cached."}),
+            "direction": ("STRING", {"default": "", "multiline": True,
+                          "tooltip": "How the video changes over the song, a line per part: 'Opening: quiet close-ups', "
+                                     "'Verses: ...', 'Pre-choruses: ...', 'Choruses: ...', 'Bridge: ...', 'Final chorus "
+                                     "and outro: ...', or a time range like '1:12-1:30: ...'. A line with no part goes "
+                                     "on every shot. Each shot's notes shape its portrait; sung clips keep the "
+                                     "performance alone (better lip sync), cutaways get the gist."}),
+            "refine_details": ("BOOLEAN", {"default": False,
+                               "tooltip": "LTX-2.5 at Quality or Max: after the take checks, every clip in the cut is "
+                                          "re-rendered with Lightricks' Refine-Details IC-LoRA (tiled, 8 steps) for "
+                                          "sharper texture, edges and grain. Adds time to every clip."}),
             "dance_video_path": ("STRING", {"default": "", "tooltip": "Motion mode: path to the dance clip"}),
             "run_name": ("STRING", {"default": ""}),
             "twin_editor": (["klein", "qwen"], {"default": "klein"}),
@@ -320,7 +331,8 @@ class FVDirector:
             dance_video_path="", run_name="", twin_editor="klein", guide_strength=1.0, queue_assemble=True,
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
-            cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5"):
+            cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5",
+            direction="", refine_details=False):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -340,7 +352,8 @@ class FVDirector:
                               audio_fx=audio_fx or "", cast_order=cast_order or "as written",
                               crowd=crowd or "auto", models=models or "auto",
                               fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080),
-                              engine="h3" if engine == "minimax-h3" else "ltx25")
+                              engine="h3" if engine == "minimax-h3" else "ltx25", direction=direction or "",
+                              refine=bool(refine_details))
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}

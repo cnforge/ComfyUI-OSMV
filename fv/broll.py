@@ -158,7 +158,8 @@ def _prompt_for(p: dict, pack: dict, shot: dict, seed: int, k: int = 0, style: s
         from .casting import _lights_for
         fit = _lights_for(lights, place)
         light = own or fit[(seed + k * 3) % len(fit)]
-        q = PROMPT_WORLD.format(world=th["theme"].replace('"', "'"), place=place, light=light)
+        world = th["theme"] + (f". In this part of the video: {shot['direction']}" if shot.get("direction") else "")
+        q = PROMPT_WORLD.format(world=world.replace('"', "'"), place=place, light=light)
         text = themes.llm(q, seed=seed, max_length=160, log=log)
         if text:
             return _clean(text), ""
@@ -272,6 +273,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
     from .critic import check_era
     pera = check_era(((pack.get("casting") or {}).get("theme") or p.get("theme") or {}).get("theme") or "")
     rel = p.get("run_rel", "")
+    from . import direction as directions
     preset, fmt = p["preset"], p["format"]
     rfps = p.get("render_fps", formats.PRESETS[preset]["fps"])
     s1, s2 = formats.portrait_size(fmt)
@@ -284,6 +286,8 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
         key = os.path.join(run_dir, f"k{rid:03d}R_00001_.png")
         seed = p.get("seed", 1) * 1000 + 900 + k
         line = ""
+        note = s.get("direction", "")  # the Direction's note for this part of the song (fv/direction.py)
+        cnote = s.get("direction_clip", "")  # its short gist, for the motion prompt
         # a Krea 2 still first, then LTX image to video: text to video alone looks AI-made; the
         # model swap costs a few minutes per run. broll_stills False uses text to video
         stills = bool(p.get("broll_stills", True))
@@ -295,10 +299,10 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             check = d.pop("check", None)
             d["light"] = d["light"][:1].upper() + d["light"][1:]
             d["action"] = _action_for(p, pack, d, seed=p.get("seed", 1) * 100 + k, log=log)
-            img = " ".join((MOMENT_STILL.format(**d) + " " + era).split())
+            img = directions.still(" ".join((MOMENT_STILL.format(**d) + " " + era).split()), note)
             img_still = finish_prompt(img, "medium", camera=camera)
-            motion = period_background(" ".join(MOMENT_MOTION.format(who=d["who"], action=d["action"]).split()) + " " +
-                                       f"{d['light']}. Setting: {d['place']}. Photorealistic, the picture fills the whole frame, edge to edge.",
+            motion = period_background(directions.clip(" ".join(MOMENT_MOTION.format(who=d["who"], action=d["action"]).split()) + " " +
+                                       f"{d['light']}. Setting: {d['place']}. Photorealistic, the picture fills the whole frame, edge to edge.", cnote),
                                        pera)
             if stills:
                 keys.append(graphs.krea2_portrait(prompt=img_still, seed=seed, prefix=f"{rel}/k{rid:03d}R",
@@ -317,12 +321,12 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             check = d.pop("check", None)
             d["light"] = d["light"][:1].upper() + d["light"][1:]
             short = d["who"].split(",")[0].split(" with ")[0]
-            img = " ".join((DANCE_STILL.format(**d) + " " + era).split())
+            img = directions.still(" ".join((DANCE_STILL.format(**d) + " " + era).split()), note)
             img_still = finish_prompt(img, "medium", camera=camera)
             motion = " ".join(DANCE_MOTION.format(who=d["who"]).split()) + " " + \
                 f"{d['light']}. Setting: {d['place']}. Photorealistic, the picture fills the whole frame, edge to edge, natural colour, " \
                 "subtle film grain."
-            motion = period_background(motion, pera)
+            motion = period_background(directions.clip(motion, cnote), pera)
             if stills:
                 keys.append(graphs.krea2_portrait(prompt=img_still, seed=seed, prefix=f"{rel}/k{rid:03d}R",
                                                   size1=s1, size2=s2).nodes)

@@ -1,4 +1,4 @@
-// OneShot MV: a "Studio" button in ComfyUI that opens the Studio page in a new tab, and the
+// cnforge Studio (on the OneShot MV engine): a "Studio" button in ComfyUI that opens the Studio page in a new tab, and the
 // Studio's "Open in ComfyUI" links: /?oneshot=<run>[&job=<take>] opens that run's graph (the
 // Director's, or one take's job) in a new workflow tab.
 import { app } from "../../scripts/app.js";
@@ -19,14 +19,14 @@ async function openRunGraph() {
     if (!r.ok) throw new Error(j.error || r.statusText);
     await app.loadApiJson(j.graph, j.name);
   } catch (e) {
-    app.extensionManager?.toast?.add({ severity: "warn", summary: "OneShot MV", detail: `Couldn't open the run's graph: ${e.message}`, life: 8000 });
+    app.extensionManager?.toast?.add({ severity: "warn", summary: "cnforge Studio", detail: `Couldn't open the run's graph: ${e.message}`, life: 8000 });
   }
 }
 
 app.registerExtension({
   name: "OneShotMV.Studio",
-  commands: [{ id: "OneShotMV.OpenStudio", label: "Open OneShot MV Studio", icon: "pi pi-video", function: open }],
-  menuCommands: [{ path: ["OneShot MV"], commands: ["OneShotMV.OpenStudio"] }],
-  actionBarButtons: [{ icon: "icon-[lucide--clapperboard]", label: "OneShot MV", tooltip: "Open OneShot MV Studio", onClick: open }],
+  commands: [{ id: "OneShotMV.OpenStudio", label: "Open cnforge Studio", icon: "pi pi-video", function: open }],
+  menuCommands: [{ path: ["cnforge Studio"], commands: ["OneShotMV.OpenStudio"] }],
+  actionBarButtons: [{ icon: "icon-[lucide--clapperboard]", label: "cnforge Studio", tooltip: "Open cnforge Studio", onClick: open }],
   setup() { openRunGraph(); },  // not awaited: startup carries on while it waits
 });

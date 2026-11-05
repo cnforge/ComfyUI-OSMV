@@ -409,6 +409,10 @@ def _director_graph(b: dict) -> dict:
          "crowd": b.get("crowd", "auto"), **cuts}
     if b.get("models") in ("auto", "24gb", "full") and _director_has("models"):
         d["models"] = b["models"]
+    if b.get("refine") and _director_has("refine_details"):  # the Refine-Details pass (LTX-2.5)
+        d["refine_details"] = True
+    if (b.get("direction") or "").strip() and _director_has("direction"):  # notes per part of the song
+        d["direction"] = b["direction"].strip()
     if _director_has("engine"):  # the singer clips' video model (an older node renders LTX only)
         d["engine"] = "minimax-h3" if _engine(b) == "h3" else "ltx-2.5"
     fps, res = _output(b)
@@ -463,12 +467,12 @@ def _job(pid: str) -> dict:
                 json.dump(p, open(pj, "w", encoding="utf-8"), indent=1)
         except Exception:
             pass
-    if run and (rec.get("project") or rec.get("director")):
+    if run and (rec.get("project") or rec.get("director") or rec.get("brief")):
         try:
             sj = os.path.join(_run_dir(run), "studio.json")
             if not os.path.isfile(sj):
                 with open(sj, "w", encoding="utf-8") as f:  # the graph: "Open in ComfyUI" loads it
-                    json.dump({"project": rec.get("project", ""), "director": rec.get("director")}, f)
+                    json.dump({"project": rec.get("project", ""), "director": rec.get("director"), "brief": rec.get("brief")}, f)
         except Exception:
             pass
     return {"state": "done", "run": run}
@@ -573,10 +577,24 @@ def _notes(d: str, p: dict, label_of: dict, done: bool = False) -> list[dict]:
     return notes[-12:]
 
 
+def _kept_qc(r: dict) -> dict | None:
+    """The QC of the take the cut uses (the timeline flags shots by it), or None before any check."""
+    tk = r.get("takes") or []
+    if not tk:
+        return None
+    t = next((x for x in tk if x.get("path") == r.get("path")), None) or max(tk, key=lambda x: x.get("score", 0))
+    return {"score": round(float(t.get("score", 0)), 2), "fail": list(t.get("fail") or []), "tries": len(tk)}
+
+
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
     per = {"max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
+    if p.get("refine"):
+        per += REFINE_PER_S
     return 6 + per * dur
+
+
+REFINE_PER_S = 1.2  # minutes of the Refine-Details pass per second of video (studio/index.html has the same)
 
 
 def _run(name: str) -> dict:
@@ -611,8 +629,9 @@ def _run(name: str) -> dict:
                       "time": _clock(float(p.get("song_t0", 0)) + s["t0"]), "len": round(s["t1"] - s["t0"], 1),
                       "energy": s.get("energy", ""), "size": s.get("size", ""), "kind": info["kind"],
                       "role": info["role"], "gender": info["gender"], "age": info["age"], "wear": info["wear"],
-                      "place": info["place"], "still": _view(still) if still else "", "clip": _view(clip) if clip else "",
+                      "place": info["place"], "part": s.get("part", ""), "direction": s.get("direction", ""), "still": _view(still) if still else "", "clip": _view(clip) if clip else "",
                       "takes": takes, "state": state, "render": r.get("id"), "pickup": int(r.get("pickup") or 0),
+                      "char": r.get("character"), "qc": _kept_qc(r),
                       "looks": [{"render": x["id"], "still": _view(x["key"]) if x.get("key") else "",
                                  "clip": _view(x["path"]) if os.path.isfile(x.get("path") or "") else "",
                                  "pickup": int(x.get("pickup") or 0)}
@@ -683,11 +702,13 @@ def _run(name: str) -> dict:
         "run": os.path.basename(d), "project": _project(d), "stage": stage, "stages": stages, "pct": pct,
         "elapsed_min": round(elapsed, 1), "estimate_min": round(est), "left_min": 0 if done else round(max(0.0, est - elapsed)),
         "queued_jobs": queued_jobs, "stalled": bool(started and not done and queued_jobs == 0),
-        "brief": {"format": p.get("format"), "preset": p.get("preset"), "seconds": round(float(p.get("duration") or 0), 1),
+        "brief": {"format": p.get("format"), "preset": p.get("preset"), "seconds": round(float(p.get("duration") or 0), 1), "t0": round(float(p.get("song_t0") or 0), 2),
                   "from": _clock(p.get("song_t0", 0)), "to": _clock(p.get("song_t1", 0)), "tempo": p.get("tempo"),
                   "fx": p.get("fx_level") or "subtle", "cuts": p.get("cuts") or {}, "seed": p.get("seed"),
                   "crowd": p.get("crowd", "auto"), "cast_order": p.get("cast_order", "as written")},
+        "edit_brief": _edit_brief(d),
         "world": world, "energy_map": p.get("energy_map") or [], "shots": shots,
+        "sections": [{k: x.get(k) for k in ("start", "end", "label", "loud")} for x in p.get("sections") or []],
         "notes": _notes(d, p, label_of, done=bool(done)),
         "latest": _view(latest) if latest else "",
         "video": _view(done["video"]) if done else "",
@@ -817,6 +838,34 @@ def _reframe(name: str) -> dict:
         raise ValueError("this run has no finished cut yet")
     _fv("reframe").reframe(d)
     return {"vertical": _vertical(_load(os.path.join(d, "done.json")))}
+
+
+def _edit_brief(d: str) -> dict | None:
+    """The Studio brief that made a run, for Edit and resubmit: saved with the run, or for older
+    runs read back from its Director graph."""
+    sj = _load(os.path.join(d, "studio.json"), {}) or {}
+    if sj.get("brief"):
+        return sj["brief"]
+    g = sj.get("director") or {}
+    ins = (g.get("2") or {}).get("inputs") or {}
+    if not ins:
+        return None
+    root = os.path.normpath(folder_paths.get_input_directory()) + os.sep
+    rel = lambda x: x[len(root):] if x.startswith(root) else x
+    b = {"name": sj.get("project", ""), "song": (g.get("1") or {}).get("inputs", {}).get("audio", ""),
+         "theme": ins.get("theme", ""), "world": "custom", "direction": ins.get("direction", ""),
+         "format": ins.get("format"), "preset": ins.get("preset"), "seconds": ins.get("seconds"), "start": ins.get("start"),
+         "seed": ins.get("seed"), "looks": ins.get("twins"), "framing": ins.get("framing"), "broll": ins.get("broll_share"),
+         "broll_style": ins.get("broll_style"), "qc": ins.get("qc_retries"), "fx": ins.get("audio_fx"),
+         "cast_order": ins.get("cast_order"), "crowd": ins.get("crowd"), "models": ins.get("models"),
+         "refine": bool(ins.get("refine_details")), "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
+         "characters": [rel(x) for x in (ins.get("artist_image_path") or "").split("|") if x]}
+    for k in ("cuts_low", "cuts_medium", "cuts_high"):
+        b[k] = ins.get(k)
+    for k in ("fps", "resolution"):
+        if str(ins.get(k, "")).isdigit():
+            b[k] = int(ins[k])
+    return {k: v for k, v in b.items() if v is not None}
 
 
 def _graph(name: str, job: str = "") -> dict:
@@ -1355,8 +1404,9 @@ async def _api(request: web.Request, route: str) -> web.Response:
             pid = await _blocking(_queue_graph, graph)
             import time
             with open(os.path.join(_jobs_dir(), re.sub(r"[^0-9a-f-]", "", pid) + ".json"), "w", encoding="utf-8") as f:
+                brief = {k: v for k, v in body.items() if k not in ("render", "run_name")}  # Edit and resubmit reloads it
                 json.dump({"t": time.time(), "estimate": est, "render": bool(body.get("render")), "project": project,
-                           "director": graph, "output": None if _director_has("fps") else _output(body)}, f)
+                           "director": graph, "brief": brief, "output": None if _director_has("fps") else _output(body)}, f)
             return web.json_response({"prompt_id": pid, "estimate": est})
         if route == "recut":
             d = _run_dir(body.get("run", ""))

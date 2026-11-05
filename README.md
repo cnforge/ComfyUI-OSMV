@@ -45,10 +45,11 @@ All three drive the same nodes, and every run shows up in the Studio under Your 
 
 ### The Studio
 
-With ComfyUI running, open http://127.0.0.1:8188/oneshot-mv/ or click **OneShot MV** in
-ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to install.
+With ComfyUI running, open http://127.0.0.1:8188/oneshot-mv/ or click **cnforge Studio** in
+ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to install. The
+sidebar holds New video, Your videos, the video you're on and the GPU and queue.
 
-![The Studio: the Brief, the Plan, Rendering and the Result](media/studio_screens.jpg)
+![The Studio: the Brief and a video's workspace](media/studio_screens.jpg)
 
 1. **The Brief.** Name the project, then drop in a song. The waveform shows the low, medium and
    high energy sections and the stretch the video will use: drag the box to move it, click or
@@ -56,36 +57,58 @@ ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to i
    to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
    that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
-   Pick a length, a World (four examples, or write your own) and the output: format, engine
+   Pick a length, a World (four examples, or write your own), an optional
+   [Direction](#writing-a-direction) (how the video changes from the opening to the last chorus)
+   and the output: format, engine
    (LTX-2.5 or MiniMax H3), quality (Max, Quality or Fast on LTX-2.5; Quality, Pika or Fast on
    H3), frame rate (24, 25, 30 or 50 fps) and size (720p to 4K, scaled up from the render).
    Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
-   close-ups only, crowd, cast order, seed), the take check's retries and the model versions.
+   close-ups only, crowd, cast order, seed), the take check's retries, the
+   [detail refine](#refine-details) and the model versions.
    The project name is optional (the song's title otherwise). The buttons say how long the plan
    and the video will take.
-2. **The Plan.** The World the tool wrote and every shot (when, what energy, who, wearing what,
-   where), before anything long renders. Change the World and plan again, or make the video.
-3. **Rendering.** The stages (plan, stills, vision check, clips, take check, b-roll, edit), a
-   storyboard that fills in as stills and clips arrive, notes from the checks, and the time left.
-   You can close the tab and come back.
-4. **Result.** The video, Download MP4, and Export XML for Premiere Pro or DaVinci Resolve (every
-   clip with its in and out points). From here you can:
-   - Re-shoot any shot. Click it and choose a new take of the same person or a new person, with
-     a note on what to change ("a woman in her seventies, in bright sun"). In a shot with looks
-     (the quick cut-ins of other looks), you can pick just one of them. Pick several takes and
-     only those shoot again, together; everything else stays as it is, the video is cut again,
-     and the cut before stays as a version you can switch back to.
-   - Make a 9:16 version of a 16:9 video: each shot cropped around the singer's face, held still
-     or following them, never moving across a cut (softer than rendering at 9:16).
-   - Open in ComfyUI: the top bar's link opens ComfyUI with the graph that made the video, and a
-     shot's panel opens one take's own workflow (runs started in the Studio keep their graph).
-   - Change the post processing without re-rendering anything: audio-reactive FX for low, medium
-     and high energy sections (None, Subtle or Intense), a color grade (None, Neon Saturated,
-     Technicolor, Teal & Orange, Golden Hour, Warm Romantic, Soft Eterna, Low Key, Industrial
-     Green or Silver Mono, each previewed on a still from your video), grain with a
-     pixel-for-pixel 1080p preview, and a vignette. Apply changes makes the new cut in about two
-     minutes.
-5. **Your videos** lists every run, whether it came from the Studio, the workflow or the SDK.
+2. **The video.** One workspace from the plan to the last re-shoot. The song runs along the
+   bottom as a timeline: its parts, its waveform, every shot as a thumbnail (orange sung, blue
+   cutaway, a red dot where the take check flagged it) and a stripe for who sings it. Click or
+   drag the ruler or waveform to scrub, click a shot to pick it, zoom in on short shots. The
+   viewer plays the cut, or before there is one, the song over each shot's clip, still or plan.
+   Keys: Space plays, ← → step through shots, T and P queue a new take or a new person, W shows
+   only flagged shots. The panel on the right has three tabs:
+   - **Shot**: the picked shot's clip, who sings it, its take-check score and why it was flagged,
+     and what the plan says (wearing, where, its Direction note).
+   - **Video**: the World, the cast (click a face for their next shot), the output, shot health,
+     and the checks' notes. While it renders, the stages and the latest take.
+   - **Finish** (once there's a cut): post processing, below.
+
+   Where the video is decides the buttons at the top:
+   - **Plan**: nothing has rendered. Shuffle the cast (plan again with the next seed) or Make
+     the video.
+   - **Rendering**: the stage, the progress and the time left; the shots fill in on the timeline
+     as stills and clips arrive. You can close the tab and come back, or stop the video.
+   - **Done**: Download, and Export XML for Premiere Pro or DaVinci Resolve (every clip with its
+     in and out points). From here you can:
+     - Re-shoot shots. Pick one and choose New take (same person and still) or New person (a new
+       still first), with an optional note ("a woman in her seventies, in bright sun"). In a
+       shot with looks (the quick cut-ins of other looks), you can pick just one of them. **New
+       takes for every flagged shot** (Video tab) queues them all. Re-shoot shoots only those,
+       together; everything else stays, the video is cut again, and the cut before stays as a
+       version you can switch back to under the viewer.
+     - Make a 9:16 version of a 16:9 video (Finish tab): each shot cropped around the singer's
+       face, held still or following them, never moving across a cut (softer than rendering at
+       9:16).
+     - Open in ComfyUI: the sidebar's link opens ComfyUI with the graph that made the video, and
+       a shot's panel opens one take's own workflow (runs started in the Studio keep their graph).
+     - Change the post processing without re-rendering anything: audio-reactive FX for low,
+       medium and high energy sections (None, Subtle or Intense), a color grade (None, Neon
+       Saturated, Technicolor, Teal & Orange, Golden Hour, Warm Romantic, Soft Eterna, Low Key,
+       Industrial Green or Silver Mono, each previewed on a still from your video), grain with a
+       pixel-for-pixel 1080p preview, and a vignette. Apply changes makes the new cut in about
+       two minutes.
+
+   **Edit brief** (at the top, the Brief step and the sidebar's This video card) opens the brief
+   that made the video in the Brief, with every setting, the song and the photos. Change anything
+   and preview or render: it starts a new video, and the original stays.
+3. **Your videos** lists every run, whether it came from the Studio, the workflow or the SDK.
 
 Every video starts with FX on Subtle, no color grade (a natural base grade is always applied),
 grain at 25% and the finest size, and no vignette. Apply and re-shoots keep the cut before
@@ -174,6 +197,34 @@ Some things that help:
   the World. The crowd setting turns this on or off.
 - Leave out real people and brands. Brand names are replaced, and signs are kept free of writing.
 
+## Writing a Direction
+
+The World says who and where; the Direction says how the video changes over the song. Write a
+line per part of the song, the part, a colon, then the note:
+
+> Opening: quiet, intimate close-ups, almost no magic.<br>
+> Verses: playful performance, miniature cities, creative transformations.<br>
+> Pre-choruses: wings growing, larger camera movements, building anticipation.<br>
+> Choruses: explosive dancing, fast camera movement, spectacular effects.<br>
+> Bridge: emotional, cinematic, stripped back.<br>
+> Final chorus and outro: maximum spectacle, enormous wings, the whole world built.
+
+- The parts: opening (intro), verses, pre-choruses (builds), choruses (hooks, drops), bridge
+  (break), final chorus and outro. One line can name several ("Final chorus and outro: ...").
+- A time range in the song works too: "1:12-1:30: the wings fold away".
+- A line without a part goes on every shot.
+- The song analysis finds the parts from its sections and their loudness. The final chorus is
+  the song's last run of chorus shots, and it takes the chorus note when it has none of its own.
+- Each shot's note shapes its singer's portrait (up to about 90 words) and its cutaways. The
+  singer clips animate that portrait with the performance prompt alone: long notes in the clip
+  prompt pushed out the lip-sync wording and the mouths stopped following the words. Cutaway
+  clips get the first sentence or two of their part's note.
+- Keep notes short and about the picture. Lines about the edit ("Editing rules: ...") are left
+  out of the pictures, and a note written for the whole group ("all five together") fits the
+  cutaways better than the one-person singer shots.
+- A planned video's Shot tab shows which part every shot is in and the note it got, so check it
+  there before rendering.
+
 ## Settings
 
 | Setting | Choices | Default |
@@ -184,6 +235,8 @@ Some things that help:
 | Quality | max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
+| Refine details | off, on (LTX-2.5 at Quality or Max: a Refine-Details IC-LoRA pass over every clip in the cut, see [Refine details](#refine-details)) | off |
+| Direction | a note per part of the song (opening, verses, pre-choruses, choruses, bridge, final chorus, outro, or a time range), see [Writing a Direction](#writing-a-direction) | none |
 | Cast order | as written, mixed | as written |
 | Crowd behind singers | auto, on, off | auto |
 | B-roll share | 0 to 0.5 of the shots | 0.125 |
@@ -334,10 +387,10 @@ Each run has its own folder, `output/oneshot-mv/runs/<run>/`, with:
   other set.
 - The lip-sync or framing checks were skipped: their weights aren't installed (Install, step 4).
   The video is still made.
-- A run stopped partway: the Studio's Rendering screen says so, and the ComfyUI console shows the
+- A run stopped partway: the Studio says so at the top of the video, and the ComfyUI console shows the
   error. Runs queued together render one after another.
 - Off-theme people or modern things in a period World: name the period and the people in the
-  World line, then re-shoot the wrong shots from the Result screen with a note.
+  World line, then re-shoot the wrong shots in the Studio with a note.
 - Slow sampling on Windows with `--highvram`: ComfyUI keeps LoRA weight backups on the GPU and
   overflows into shared memory. The Director adds Weight Backups to RAM after the LTX loaders to
   prevent this.
@@ -380,8 +433,8 @@ pass. Both use the same VAEs, upscalers and LoRAs.
 
 | Model | 24 GB set (default) | Full set (48 GB+) | Download |
 |---|---|---|---|
-| LTX-2.5 22B distilled | `ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors`, 21.5 GB | `ltx-2.5-22b-distilled-transformer-bf16.safetensors`, 42.0 GB | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
-| Gemma 4 12B (LTX-2.5's text encoder) | `gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors`, 15.4 GB | `gemma4-12b-with-proj-ltx-2.5-bf16.safetensors`, 26.3 GB | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| LTX-2.5 22B distilled | `ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors`, 21.5 GB | the same int8 file | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| Gemma 4 12B (LTX-2.5's text encoder) | `gemma4-12b-with-proj-ltx-2.5-bf16.safetensors`, 26.3 GB | the same bf16 file | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
 | LTX-2.3 22B dev (for its Gemma 3) | `ltx-2.3-22b-dev-fp8.safetensors`, 29.1 GB | `ltx-2.3-22b-dev.safetensors`, 46.1 GB | [Lightricks/LTX-2.3-fp8](https://huggingface.co/Lightricks/LTX-2.3-fp8), [Lightricks/LTX-2.3](https://huggingface.co/Lightricks/LTX-2.3) |
 | Gemma 3 12B IT | `gemma_3_12B_it_fp8_scaled.safetensors`, 13.2 GB | `gemma_3_12B_it.safetensors`, 24.4 GB | [Comfy-Org/ltx-2](https://huggingface.co/Comfy-Org/ltx-2/tree/main/split_files/text_encoders) |
 | Krea 2 Turbo | `krea2_turbo_fp8_scaled.safetensors`, 13.1 GB | `krea2_turbo_bf16.safetensors`, 26.3 GB | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
@@ -389,7 +442,7 @@ pass. Both use the same VAEs, upscalers and LoRAs.
 | Qwen3-VL 4B (Krea 2's text encoder) | `qwen3vl_4b_fp8_scaled.safetensors`, 5.2 GB | `qwen3vl_4b_bf16.safetensors`, 8.9 GB | [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2) |
 | Both sets | The LTX-2.5 video and audio VAEs (1.9 GB), the LTX-2.5 spatial upscaler x2 (1.0 GB), the LTX-2.3 IC-LoRA Union Control (0.7 GB) and the Qwen-Image VAE (0.25 GB) | | See the tables below |
 
-In all, a default run's 24 GB set is about 100 GB to download and the full set about 205 GB.
+In all, a default run's 24 GB set is about 111 GB to download and the full set about 185 GB.
 
 MiniMax H3 (the second engine) adds:
 
@@ -406,6 +459,19 @@ MiniMax H3 (the second engine) adds:
 The Max tier on LTX-2.5 adds `ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors`
 (21.5 GB; `-bf16`, 42.0 GB, in the full set) and `ltx-2.5-22b-distilled-lora-450-bf16.safetensors`
 (8.9 GB), both from [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5).
+
+### Refine details
+
+Refine details (Advanced, or `refine_details` on the Director) is an optional last pass for LTX-2.5
+at Quality or Max. Once the take checks have picked the final clips, each clip in the cut is
+re-rendered with Lightricks' [Refine-Details IC-LoRA](https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Refine-Details)
+(`ltx-2.5-22b-ic-lora-refine-details-1.0.safetensors`, 1.3 GB, LTX-2.x Community License, gated:
+accept its terms on Hugging Face first). The clip is the guide, frame for frame, so the framing,
+colour, motion and lip sync stay; the texture, edges and grain that the latent upscale softened
+come back. It runs on the distilled model in overlapping 1024×576 tiles fused at every step
+(`LTXVTiledFusionSampler` from ComfyUI-LTXVideo, 8 steps), as in Lightricks'
+`LTX-2.5_V2V_TiledFusion_Upscale` workflow. It adds time to every clip. A clip re-shot later in the
+Studio goes into the cut without it.
 
 A default run (voice mode, `crowd` pack) uses:
 
