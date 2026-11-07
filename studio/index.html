@@ -345,6 +345,9 @@ canvas.twave{display:block;height:46px;cursor:pointer}
 .tshot .re.go{animation:blink 1.2s ease-in-out infinite}
 .tshot.sel{outline:2px solid var(--text);outline-offset:1px;z-index:2}
 .tshot.picked{box-shadow:inset 0 0 0 2px var(--accent)}
+.tshot.now{box-shadow:0 0 0 2px var(--accent),0 0 14px color-mix(in srgb,var(--accent) 55%,transparent);z-index:3}
+.tshot .nw{position:absolute;left:3px;top:7px;max-width:calc(100% - 6px);display:flex;align-items:center;gap:3px;font:700 9.5px var(--mono);color:var(--ink);background:var(--accent);border-radius:4px;padding:0 4px;white-space:nowrap;overflow:hidden}
+.tshot .nw::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;background:currentColor;animation:blink 1.2s ease-in-out infinite}
 .tshot.now:not(.sel){outline:1px solid rgba(255,255,255,.45)}
 .tinner.weak .tshot:not(.flagged){opacity:.25;filter:grayscale(1)}
 .castl{position:relative}
@@ -665,7 +668,7 @@ const gpuName = g => String(g || "").replace(/^NVIDIA\s+/i, "").replace(/\s+(Bla
 const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; const m = Math.round(s / 60); return mins(m); };
 // minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
 function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
-  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({ultra: 58, max: 10, quality: 2.5}[b.preset] || 1);
+  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({ultra: 9, max: 10, quality: 2.5}[b.preset] || 1);
   const refine = b.refine && b.engine !== "h3" && b.preset !== "fast" ? REFINE_PER_S : 0;
   return 6 + (per + refine) * sec; }
 // minutes of Refine-Details pass per second of video: 81 s for a 65-frame 1152x1920 clip, and a cut renders
@@ -1379,7 +1382,7 @@ function wsHead(){
     prog.className = "wprog" + (r.stalled ? " stall" : "");
     prog.innerHTML = r.stalled
       ? `<span>Nothing of this video is left in ComfyUI's queue, but it isn't finished. A step probably failed: the ComfyUI console shows why. You can <a href="#/edit/${encodeURIComponent(r.run)}">edit its brief and resubmit it</a>.</span>`
-      : `<span>${esc(now ? now.name + " · " + now.meta : "Starting")}</span><div class="progress" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${r.pct}"><div style="width:${r.pct}%"></div></div>
+      : `<span>${esc((now ? now.name + " · " + now.meta : "Starting") + nowLine(r))}</span><div class="progress" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${r.pct}"><div style="width:${r.pct}%"></div></div>
          <span>${r.pct}% · ${mins(r.elapsed_min)} in · ${r.left_min > 0 ? "about " + mins(r.left_min) + " to go" : "nearly there"}</span>`;
   } else {
     const v = W.vers[W.curV] || {};
@@ -1455,13 +1458,26 @@ function wsMarks(){
     re.className = "re" + (going.has(n) ? " go" : "");
     re.textContent = going.has(n) ? "…" : q.map(x => x.mode === "recast" ? "P" : "T").join("");
   });
+  // the shot the run's ComfyUI job is making right now
+  const nj = W.r.now || {}, nowS = new Set(nj.shots || []);
+  document.querySelectorAll(".tshot").forEach(el => {
+    const on = nowS.has(+el.dataset.n);
+    el.classList.toggle("now", on);
+    let nw = el.querySelector(".nw");
+    if (!on){ if (nw) nw.remove(); return; }
+    if (!nw){ nw = document.createElement("span"); nw.className = "nw"; el.appendChild(nw); }
+    nw.textContent = NOW_WHAT[nj.what] || "Rendering";
+  });
   $("#tinner").classList.toggle("weak", W.weak);
 }
+const NOW_WHAT = {clip: "Clip", take: "New take", refine: "Refining", still: "Still"};
+const nowLine = r => { const nj = r.now || {}; return (nj.shots || []).length ? ` · now: shot${nj.shots.length > 1 ? "s" : ""} ${nj.shots.join(", ")} (${(NOW_WHAT[nj.what] || "rendering").toLowerCase()})` : nj.what === "cut" ? " · now: cutting the video" : ""; };
 function wsTip(e, s){
   const W = S.ws, q = W.pk.filter(x => x.n === s.n);
   let t = $("#ttip"); if (!t){ t = document.createElement("div"); t.className = "ttip"; t.id = "ttip"; document.body.appendChild(t); }
   t.innerHTML = `<b>Shot ${s.n}</b> · ${tc(s.t0)}–${tc(s.t1)}<br>${s.kind === "broll" ? "Cutaway" : esc(s.role || "Sung")} · ${esc(s.size)}${s.part ? " · " + esc(PARTS[s.part] || s.part) : ""}` +
     (W.ph === "render" ? `<br><span class="dim">${s.state === "clip" ? "Clip done" : s.state === "still" ? "Still ready" : "Planned"}</span>` : "") +
+    (((W.r.now || {}).shots || []).includes(s.n) ? `<br><span style="color:var(--accent)">Rendering now: ${(NOW_WHAT[W.r.now.what] || "rendering").toLowerCase()}</span>` : "") +
     (s.qc ? `<br><span style="color:${flagged(s) ? "var(--bad)" : "var(--ok)"}">${flagged(s) ? s.qc.fail.map(f => (FLAGS[f] || f).split(":")[0]).join(", ") : "Passed the take check"}</span>` : "") +
     (q.length ? `<br><span style="color:var(--accent)">To re-shoot: ${q.map(x => x.mode === "recast" ? "new person" : "new take").join(", ")}</span>` : "");
   wsTipMove(e);

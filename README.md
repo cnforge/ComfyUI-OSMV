@@ -273,7 +273,9 @@ upscale stage runs 8 steps instead of 3. Everything is a third bigger: 2560×153
 1536×2560 for 9:16. On four test shots, Max sometimes drifted off the singer to the people around
 them; Ultra kept the singer in frame every time, with finer skin, hair and jewellery. More steps alone,
 or STG alone, didn't do that (STG alone came out softer). It takes about 6× Max's time and needs
-the same files as Max; it's meant for a GPU with lots of memory.
+the same files as Max; it's meant for a GPU with lots of memory. Ultra's lips run further ahead of
+the voice than Max's (about 0.12 s), so its cut shifts them back by that much wherever SyncNet
+can't measure a take with confidence.
 H3 has no Max or Ultra: its unpruned model, at twice the time, looked no different.
 
 MiniMax H3 needs ComfyUI's MiniMax H3 nodes (a recent ComfyUI), its reference model, the Qwen3-VL

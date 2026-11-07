@@ -287,7 +287,7 @@ def _estimate(b: dict) -> dict:
     total = sum(x["s"] for x in parts)
     return {"total_s": int(total), "parts": parts, "shots": len(p["shots"]), "need": need,
             "world_cached": bool(bible) and have >= need, "window": [round(p["song_t0"], 2), round(p["song_t1"], 2)],
-            "render_min": round(6 + {"ultra": 58.0, "max": 10.0, "quality": 2.5}.get(b.get("preset", "quality"), 1.0) * win)}
+            "render_min": round(6 + {"ultra": 9.0, "max": 10.0, "quality": 2.5}.get(b.get("preset", "quality"), 1.0) * win)}
 
 
 def _project(d: str) -> str:
@@ -484,6 +484,33 @@ def _run_jobs(name: str):
     return [x for x in running if mine(x)], [x for x in pending if mine(x)]
 
 
+_NOW_RE = re.compile(r"^(?:(r)(\d{3})[A-Z](_refined|_t\d+)?|(k)(\d{3})R|(p)(\d{3}))(?:_|$)")
+
+
+def _now_job(running: list, p: dict) -> dict:
+    """What this run's running ComfyUI job is making, from its save name: {"what": clip / take /
+    refine / still / cut, "shots": [shot numbers]}, or {} when nothing of the run is running."""
+    if not running:
+        return {}
+    prefixes = [str(n.get("inputs", {}).get("filename_prefix", "")) for n in running[0][2].values()
+                if isinstance(n, dict) and n.get("inputs", {}).get("filename_prefix")]
+    rshot = {r["id"]: r.get("shot") for r in p.get("renders", []) if "id" in r}
+    for pre in prefixes:
+        if any(n.get("class_type") == "FVAssemble" for n in running[0][2].values() if isinstance(n, dict)):
+            return {"what": "cut", "shots": []}
+        m = _NOW_RE.match(os.path.basename(pre))
+        if not m:
+            continue
+        if m.group(1) or m.group(4):
+            rid = int(m.group(2) or m.group(5))
+            shots = [rshot[rid] + 1] if rshot.get(rid) is not None else []
+            what = "still" if m.group(4) else {"_refined": "refine", None: "clip"}.get(m.group(3), "take")
+            return {"what": what, "shots": shots}
+        n = int(m.group(7))  # a performer's still: every shot that performer sings
+        shots = sorted({r["shot"] + 1 for r in p.get("renders", []) if r.get("performer") == n and r.get("shot") is not None})
+        return {"what": "still", "shots": shots}
+    return {"what": "other", "shots": []}
+
 def _cancel(name: str) -> dict:
     from server import PromptServer
     running, pending = _run_jobs(name)
@@ -588,7 +615,7 @@ def _kept_qc(r: dict) -> dict | None:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = {"ultra": 58.0, "max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
+    per = {"ultra": 9.0, "max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
     if p.get("refine"):
         per += REFINE_PER_S
     return 6 + per * dur
@@ -638,10 +665,11 @@ def _run(name: str) -> dict:
                                 for x in p.get("renders", []) if x.get("shot") == s["index"] and x.get("role") == "B"
                                 and not x.get("unused") and x is not r]})
     # where the run is
-    queued_jobs = 0
+    queued_jobs, now_job = 0, {}
     try:
         running, pending = _run_jobs(os.path.basename(d))
         queued_jobs = len(running) + len(pending)
+        now_job = _now_job(running, p)
     except Exception:
         pass
     started = tm.get("queued")
@@ -701,7 +729,7 @@ def _run(name: str) -> dict:
     return {
         "run": os.path.basename(d), "project": _project(d), "stage": stage, "stages": stages, "pct": pct,
         "elapsed_min": round(elapsed, 1), "estimate_min": round(est), "left_min": 0 if done else round(max(0.0, est - elapsed)),
-        "queued_jobs": queued_jobs, "stalled": bool(started and not done and queued_jobs == 0),
+        "queued_jobs": queued_jobs, "now": now_job, "stalled": bool(started and not done and queued_jobs == 0),
         "brief": {"format": p.get("format"), "preset": p.get("preset"), "seconds": round(float(p.get("duration") or 0), 1), "t0": round(float(p.get("song_t0") or 0), 2),
                   "from": _clock(p.get("song_t0", 0)), "to": _clock(p.get("song_t1", 0)), "tempo": p.get("tempo"),
                   "fx": p.get("fx_level") or "subtle", "cuts": p.get("cuts") or {}, "seed": p.get("seed"),

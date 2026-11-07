@@ -48,8 +48,9 @@ PRESETS = {
     "max": {"stages": 2, "fps": 25, "engine": "ltx25_dev", "sync_delay": 0.05},
     # Ultra: Max with LTX-2's own dev guidance (CFG + STG + cross-modal, graphs.MultimodalGuider),
     # 40 steps, 8 upscale steps, and a third bigger (1536x2560 at 9:16). On 4 test shots the singer
-    # stayed in frame where Max drifted off her, with finer skin and hair; about 6x Max's time.
-    "ultra": {"stages": 2, "fps": 25, "engine": "ltx25_dev", "sync_delay": 0.05, "stg": True, "steps": 40,
+    # stayed in frame where Max drifted off them, with finer skin and hair; about 6x Max's time. Its
+    # lips lead by more than Max's: SyncNet put 9 of 11 takes 2-5 frames early (median 3, 0.12 s).
+    "ultra": {"stages": 2, "fps": 25, "engine": "ltx25_dev", "sync_delay": 0.12, "stg": True, "steps": 40,
               "up_steps": 8},
     # MiniMax H3 (fv/h3.py): one pass of the 8-step reference model at 24 fps, the clip's vocal
     # copied 1:1 as its soundtrack. Its lip offset isn't known yet: SyncNet measures every take.
