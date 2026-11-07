@@ -458,6 +458,13 @@ def _job(pid: str) -> dict:
                     if ev == "execution_error" and isinstance(d, dict)), "")
         return {"state": "error", "error": msg.strip() or "the job failed (see the ComfyUI console)"}
     run = ""
+    for node_out in (h.get("outputs") or {}).values():  # a film's plan: the film it made
+        for it in node_out.get("text", []) or []:
+            if isinstance(it, str) and it.startswith("{") and '"film"' in it:
+                try:
+                    return {"state": "done", "film": json.loads(it)["film"]}
+                except (ValueError, KeyError):
+                    pass
     for node_out in (h.get("outputs") or {}).values():  # a made song: its input-folder name and lyrics
         for it in node_out.get("text", []) or []:
             if isinstance(it, str) and it.startswith("{") and '"song"' in it:
@@ -1383,6 +1390,87 @@ def _runs() -> list[dict]:
     return out
 
 
+# ------------------------------------------------------------------ film mode (fv/film.py)
+def _films_root() -> str:
+    return os.path.join(_out(), "oneshot-mv", "films")
+
+
+def _film_dir(run: str) -> str:
+    d = os.path.normpath(os.path.join(_films_root(), os.path.basename(run or "")))
+    if not run or not os.path.isfile(os.path.join(d, "film.json")):
+        raise web.HTTPNotFound(text=json.dumps({"error": f"no film '{run}'"}), content_type="application/json")
+    return d
+
+
+def _films() -> list[dict]:
+    out = []
+    root = _films_root()
+    for d in sorted(glob.glob(os.path.join(root, "*", "film.json")), key=os.path.getmtime, reverse=True):
+        f = _load(d, {}) or {}
+        fd = os.path.dirname(d)
+        fin = os.path.join(fd, "final.mp4")
+        thumb = os.path.join(fd, "thumb.jpg")
+        out.append({"run": os.path.basename(fd), "film": True, "title": f.get("title", ""), "kind": f.get("kind", "film"),
+                    "seconds": f.get("seconds"), "format": f.get("format"), "when": f.get("created", ""),
+                    "video": _view(fin) if os.path.isfile(fin) else "", "thumb": _view(thumb) if os.path.isfile(thumb) else "",
+                    "shots": len(f.get("shots", []))})
+    return out
+
+
+def _film(run: str) -> dict:
+    d = _film_dir(run)
+    f = _fv("film").load(d)
+    running, pending = _run_jobs(os.path.basename(d))
+    names = lambda xs: {m for x in xs for m in re.findall(r'"filename_prefix": "[^"]*/(s\d{3}(?:_t\d+)?)"', json.dumps(x[2]))}
+    run_n, pend_n = names(running), names(pending)
+    cut_q = any('"FVFilmCut"' in json.dumps(x[2]) for x in pending)
+    cut_r = any('"FVFilmCut"' in json.dumps(x[2]) for x in running)
+    shots = []
+    for i, sh in enumerate(f.get("shots", [])):
+        clip = _fv("film").clip_for(d, i)
+        takes = len(glob.glob(os.path.join(d, f"s{i:03d}_*.mp4")))
+        st = ("rendering" if any(n.startswith(f"s{i:03d}") for n in run_n) else
+              "queued" if any(n.startswith(f"s{i:03d}") for n in pend_n) else "done" if clip else "missing")
+        shots.append({"i": i, "t0": sh["t0"], "t1": sh["t1"], "video": sh.get("video", ""), "cast": sh.get("cast", []),
+                      "prompt": sh.get("prompt", ""), "clip": _view(clip) if clip else "", "takes": takes, "state": st})
+    fin = os.path.join(d, "final.mp4")
+    busy = bool(running or pending)
+    return {"run": os.path.basename(d), "title": f.get("title"), "kind": f.get("kind"), "script": f.get("script"),
+            "style": f.get("style", ""), "seconds": f.get("seconds"), "format": f.get("format"), "preset": f.get("preset"),
+            "look": f.get("look"), "look_grade": f.get("look_grade", "none"), "cast": f.get("cast", []),
+            "song": os.path.basename(f.get("song") or ""), "song_start": f.get("song_start"), "tempo": f.get("tempo"),
+            "h3_vsr": f.get("h3_vsr", False), "seed": f.get("seed"), "created": f.get("created"),
+            "video": _view(fin) + f"&t={int(os.path.getmtime(fin))}" if os.path.isfile(fin) else "",
+            "state": "cutting" if cut_r else "rendering" if busy else ("done" if os.path.isfile(fin) else "stopped"),
+            "queued": len(pending), "cut_queued": cut_q, "shots": shots,
+            "looks": [["none", "As made"]] + [[k, v] for k, v in _fv("finish").LOOKS.items() if k != "none"]}
+
+
+def _film_reshoot(run: str, shots: list[int]) -> dict:
+    d = _film_dir(run)
+    fm = _fv("film")
+    f = fm.load(d)
+    ids = []
+    for i in shots:
+        if not 0 <= i < len(f["shots"]):
+            continue
+        take = len(glob.glob(os.path.join(d, f"s{i:03d}_*.mp4")))
+        ids.append(_queue_graph(fm.shot_job(f, i, f["seed"] * 1000 + i + 7919 * take, take=take)))
+    if ids:
+        ids.append(_queue_graph(fm.cut_graph(d)))
+    return {"queued": len(ids)}
+
+
+def _film_recut(run: str, look: str | None) -> dict:
+    d = _film_dir(run)
+    fm = _fv("film")
+    if look is not None:
+        f = fm.load(d)
+        f["look_grade"] = look if look in _fv("finish").LOOKS else "none"
+        fm.save(f)
+    return {"prompt_id": _queue_graph(fm.cut_graph(d))}
+
+
 # ------------------------------------------------------------------ the request handler
 async def handle(request: web.Request, pack_dir: str) -> web.StreamResponse:
     tail = request.match_info.get("tail", "")
@@ -1415,6 +1503,12 @@ async def _api(request: web.Request, route: str) -> web.Response:
         return web.json_response(await _blocking(lambda: _fv("graphs").models_report()))
     if route == "runs":
         return web.json_response(await _blocking(_runs))
+    if route == "looks":  # the finish's grades, as the Finish tab names them
+        return web.json_response([["none", "As made"]] + [[k, v] for k, v in _fv("finish").LOOKS.items() if k != "none"])
+    if route == "films":
+        return web.json_response(await _blocking(_films))
+    if route.startswith("film/") and request.method == "GET":
+        return web.json_response(await _blocking(_film, route[5:]))
     if route == "songmaker":  # can this ComfyUI make a song: the node loaded and the ACE-Step files
         import nodes as comfy_nodes  # type: ignore
         return web.json_response({"node": "FVSong" in comfy_nodes.NODE_CLASS_MAPPINGS,
@@ -1477,6 +1571,38 @@ async def _api(request: web.Request, route: str) -> web.Response:
                 json.dump({"t": time.time(), "estimate": est, "render": bool(body.get("render")), "project": project,
                            "director": graph, "brief": brief, "output": None if _director_has("fps") else _output(body)}, f)
             return web.json_response({"prompt_id": pid, "estimate": est})
+        if route == "film":  # film mode: plan (Gemma) and queue every shot, then the cut
+            import nodes as comfy_nodes  # type: ignore
+            if "FVFilm" not in comfy_nodes.NODE_CLASS_MAPPINGS:
+                return web.json_response({"error": "Restart ComfyUI to make films: the film node isn't loaded yet."}, status=400)
+            if len(str(body.get("script") or "").strip()) < 8:
+                return web.json_response({"error": "Write the script or idea first."}, status=400)
+            preset = body.get("preset") if body.get("preset") in _fv("formats").PRESETS else "quality"
+            if body.get("song"):
+                _input_path(body["song"])
+            why = await _blocking(lambda: _fv("graphs").not_ready("auto", artist=False, engine=_fv("formats").engine_of(preset), preset=preset))
+            if why:
+                return web.json_response({"error": f"Can't render on this ComfyUI yet: {why}."}, status=400)
+            name = str(body.get("name") or "").strip()[:80]
+            inp = {"script": str(body["script"])[:8000], "kind": body.get("kind") if body.get("kind") in ("commercial", "film", "music video", "trailer", "documentary") else "commercial",
+                   "seconds": float(min(300, max(5, float(body.get("seconds") or 30)))),
+                   "format": body.get("format") if body.get("format") in ("16:9", "9:16", "1:1") else "16:9",
+                   "preset": preset, "seed": int(body.get("seed") or 1), "queue_renders": True,
+                   "style": str(body.get("style") or "")[:400], "song": str(body.get("song") or ""),
+                   "song_start": float(body.get("song_start", -1) if body.get("song_start") is not None else -1),
+                   "look": body.get("look") if body.get("look") in _fv("finish").LOOKS else "none",
+                   "h3_upscale": "relayvsr" if body.get("h3_upscale") == "relayvsr" else "auto",
+                   "sound": bool(body.get("sound", True)), "resolution": str(int(body.get("resolution") or 1080)),
+                   "run_name": (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] + "-" + _dt.datetime.now().strftime("%Y%m%d-%H%M")) if name else ""}
+            pid = await _blocking(_queue_graph, {"1": {"class_type": "FVFilm", "inputs": inp}})
+            return web.json_response({"prompt_id": pid})
+        if route == "film/reshoot":
+            return web.json_response(await _blocking(_film_reshoot, body.get("run", ""), [int(x) for x in body.get("shots") or []]))
+        if route == "film/recut":
+            return web.json_response(await _blocking(_film_recut, body.get("run", ""), body.get("look")))
+        if route == "film/cancel":
+            d = _film_dir(body.get("run", ""))
+            return web.json_response(await _blocking(_cancel, os.path.basename(d)))
         if route == "song":  # make the song: queued like any job, polled with api/job/<id>
             import nodes as comfy_nodes  # type: ignore
             if "FVSong" not in comfy_nodes.NODE_CLASS_MAPPINGS:

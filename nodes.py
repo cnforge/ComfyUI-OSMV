@@ -20,9 +20,10 @@ from .fv import identity as fv_identity
 from .fv import critic as fv_critic
 from .fv import direction as fv_direction
 from .fv import song as fv_song
+from .fv import film as fv_film
 
 CATEGORY = "OneShot MV"
-_MODULES = [beat, dsplan, formats, casting, faces, plan, pose, graphs, fv_theme, fv_direction, fv_broll, fv_identity, fv_critic, fv_song, stems, audiofx, fx, finish, export, lipsync, qc, fv_assemble, director]
+_MODULES = [beat, dsplan, formats, casting, faces, plan, pose, graphs, fv_theme, fv_direction, fv_broll, fv_identity, fv_critic, fv_song, fv_film, stems, audiofx, fx, finish, export, lipsync, qc, fv_assemble, director]
 
 
 def _reload():
@@ -846,6 +847,73 @@ class FVSong:
         return {"ui": {"text": [json.dumps(r)]}, "result": (audio, r["song"])}
 
 
+class FVFilm:
+    """Film mode: a commercial or short film from a script. Gemma writes the cast, the look and the
+    shot list; every shot is queued as text to video (LTX-2.5 or MiniMax H3), then the cut."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        presets = [k for k in formats.PRESETS if k not in ("fast_voice",)]
+        return {"required": {"script": ("STRING", {"default": "", "multiline": True}),
+                             "kind": (["commercial", "film", "music video", "trailer", "documentary"], {"default": "commercial"}),
+                             "seconds": ("FLOAT", {"default": 30.0, "min": 5.0, "max": 300.0, "step": 1.0}),
+                             "format": (list(formats.FORMATS.keys()), {"default": "16:9"}),
+                             "preset": (presets, {"default": "quality"}),
+                             "seed": ("INT", {"default": 1, "min": 0, "max": 2 ** 31 - 1}),
+                             "queue_renders": ("BOOLEAN", {"default": True})},
+                "optional": {"style": ("STRING", {"default": ""}),
+                             "song": ("STRING", {"default": "", "tooltip": "A song in the input folder: the music, cut on its beats. Empty: the shots' own sound."}),
+                             "song_start": ("FLOAT", {"default": -1.0, "min": -1.0, "max": 3600.0, "tooltip": "-1: the strongest stretch"}),
+                             "look": (["none"] + [k for k in finish.LOOKS if k != "none"], {"default": "none"}),
+                             "h3_upscale": (["auto", "relayvsr"], {"default": "auto"}),
+                             "sound": ("BOOLEAN", {"default": True, "tooltip": "Without a song: keep the sound each shot was made with"}),
+                             "resolution": (["720", "1080", "1440", "2160"], {"default": "1080"}),
+                             "run_name": ("STRING", {"default": ""})}}
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("film_dir",)
+    FUNCTION = "run"
+    OUTPUT_NODE = True
+    CATEGORY = CATEGORY
+
+    def run(self, script, kind, seconds, format, preset, seed, queue_renders, style="", song="", song_start=-1.0,
+            look="none", h3_upscale="auto", sound=True, resolution="1080", run_name=""):
+        _reload()
+        song_path = _resolve(os.path.join(folder_paths.get_input_directory(), song)) if song else ""
+        film = fv_film.plan(script=script, seconds=seconds, fmt=format, preset=preset, seed=seed,
+                            out_root=folder_paths.get_output_directory(), kind=kind, style=style, song_path=song_path,
+                            song_start=song_start, look=look, run_name=run_name, h3_upscale=h3_upscale, sound=sound)
+        film["resolution"] = int(resolution or 1080)
+        if queue_renders:
+            ids = [director.queue_prompt(j["graph"]) for j in film["jobs"]]
+            ids.append(director.queue_prompt(fv_film.cut_graph(film["dir"])))
+            film["queued"] = ids
+        fv_film.save(film)
+        info = {"film": film["run"], "title": film["title"], "shots": len(film["shots"]), "dir": film["dir"]}
+        return {"ui": {"text": [json.dumps(info)]}, "result": (film["dir"],)}
+
+
+class FVFilmCut:
+    """Film mode's cut: the shots' newest takes in order, the music or their sound, the finish.
+    Run it again after a re-shoot or a new look; nothing re-renders."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"film_dir": ("STRING", {"default": ""})}}
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("video",)
+    FUNCTION = "run"
+    OUTPUT_NODE = True
+    CATEGORY = CATEGORY
+
+    def run(self, film_dir):
+        _reload()
+        out = fv_film.cut(film_dir)
+        return {"ui": {"text": [json.dumps({"film_cut": os.path.basename(film_dir.rstrip("/")), "video": out})]},
+                "result": (out,)}
+
+
 NODE_CLASS_MAPPINGS = {
     "FVFreeMemory": FVFreeMemory,
     "FVKeep": FVKeep,
@@ -862,6 +930,8 @@ NODE_CLASS_MAPPINGS = {
     "FVFaceMatch": FVFaceMatch,
     "FVTheme": FVTheme,
     "FVSong": FVSong,
+    "FVFilm": FVFilm,
+    "FVFilmCut": FVFilmCut,
     "FVLoadImagePath": FVLoadImagePath,
     "FVLoadVideoPath": FVLoadVideoPath,
     "FVLoadAudioPath": FVLoadAudioPath,
@@ -885,4 +955,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "FVFaceMatch": "OneShot MV: Face Match",
     "FVTheme": "OneShot MV: Theme Preview",
     "FVSong": "OneShot MV: Make a Song",
+    "FVFilm": "OneShot MV: Film (script to video)",
+    "FVFilmCut": "OneShot MV: Film Cut",
 }

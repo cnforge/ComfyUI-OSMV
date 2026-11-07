@@ -387,7 +387,7 @@ CONTINUITY = "One continuous take with no cuts: the same person in the same plac
 def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
                audio_path=None, audio_seek=0.0, guide_video=None, guide_start=0.0,
                guide_strength=1.0, guide_face=True, save_pose=False, key_strengths=None,
-               keyframes=None, continuity=True, size=None, broll=False, vsr=False):
+               keyframes=None, continuity=True, size=None, broll=False, vsr=False, sound=False):
     """One LTX clip. audio_path -> lip sync on a frozen vocal latent (voice);
     guide_video -> DWPose union-control guide (twins, motion).
     keyframes: [(image_path, frame_idx, strength)] pinned at later frames of the clip, in every
@@ -514,6 +514,8 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     t_size = min(512, (frames + 7) // 8 * 8 + 8)
     dec = g.add("VAEDecodeTiled", samples=vlat, vae=m["vae"], tile_size=512, overlap=64,
                 temporal_size=t_size, temporal_overlap=8)
+    if au is None and sound:  # text to video (film mode): keep the sound LTX made with the picture
+        au = O(g.add("LTXVAudioVAEDecode", samples=O(sep, 1), audio_vae=m["avae"]))
     _save_video(g, O(dec), fps, prefix, audio=au)
     return g
 

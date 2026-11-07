@@ -124,6 +124,25 @@ To click through every screen on a finished video without rendering anything, op
 http://127.0.0.1:8188/oneshot-mv/?demo. Starting a video, rendering, Apply and re-shoots are
 simulated there in seconds, and nothing is sent to ComfyUI.
 
+### Film mode: commercials and short films
+
+**New film or ad** in the sidebar makes a video with no singers and no song needed. Write a script, a
+treatment or one line, pick what it is (commercial, short film, trailer, documentary) and an
+optional style. Gemma writes the film's bible, a cast with fixed descriptions (so a person or a
+product looks the same in every shot) and a look, then a shot list. Every shot is text to video on
+LTX-2.5 (Fast, Quality, Max, Ultra) or MiniMax H3 (with RelayVSR 2x if you like), and the cut joins
+them with:
+
+- **the shots' own sound** (LTX-2.5 and H3 make sound with the picture), normalised,
+- **a song** from the input folder, its strongest stretch, every cut moved onto a beat,
+- **music made for it** (ACE-Step 1.5, written from the script, instrumental by default), or
+- **silence**.
+
+The film's page shows the cut, every shot with its description, the bible and the script. Change
+the grade and **Re-cut** (nothing re-renders), or **Re-shoot** a shot: it renders a new take and
+cuts again. A 15-second ad on LTX-2.5 Fast takes under 2 minutes on an RTX PRO 6000. Films are in
+`output/oneshot-mv/films/<name>/`: `final.mp4`, every shot's takes and `film.json`.
+
 ### The ComfyUI workflow
 
 Open an example from Templates in the left sidebar, under Extensions, ComfyUI-OneShotMV. You can
@@ -429,6 +448,8 @@ Each run has its own folder, `output/oneshot-mv/runs/<run>/`, with:
 | OneShot MV: Assemble | Cuts a run together with FX and the finish. Run it again to re-cut; nothing re-renders. |
 | OneShot MV: Run Result | Reports where a run is and returns the finished video as a job output (the SDK uses it). |
 | OneShot MV: Theme Preview | Shows what a World line turns into before you spend a run on it. |
+| OneShot MV: Film (script to video) | Film mode: writes the cast, look and shot list for a script and queues every shot and the cut. |
+| OneShot MV: Film Cut | Cuts a film from its shots' newest takes with the music or their sound and the finish. |
 | OneShot MV: Make a Song | Writes lyrics for a World and sings them with ACE-Step 1.5 into the input folder. |
 | OneShot MV: Lip Sync Score | Scores a finished run's lip sync with SyncNet, take by take. |
 | OneShot MV: Finish | Applies the finish (grade, grain, vignette) to any frames. |
