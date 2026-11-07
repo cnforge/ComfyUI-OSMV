@@ -136,6 +136,10 @@ option{background:var(--panel2);color:var(--text)}
 .drop{border:1px dashed var(--line3);border-radius:var(--r);padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;cursor:pointer;color:var(--muted);background:repeating-linear-gradient(-45deg,transparent 0 10px,rgba(255,255,255,.012) 10px 20px)}
 .drop svg{color:var(--accent)}
 .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-bg)}
+.mksong{margin-top:14px;padding:14px;border:1px solid var(--line2);border-radius:var(--r);background:var(--panel2);display:flex;flex-direction:column;gap:10px}
+.mksong .hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.mksong .hd b{font-size:14px}
+.mksong details summary{cursor:pointer;color:var(--muted);font-size:12.5px}.mksong details textarea{margin-top:8px;min-height:120px}
+#mknote{font-size:12.5px}
 .songline{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;min-width:0}
 #songname{font-weight:700;font-size:15px}
 .wave{position:relative;margin-top:34px;height:96px;cursor:pointer;user-select:none;touch-action:none;background:linear-gradient(var(--line) 0 0) 0 50%/100% 1px no-repeat}
@@ -508,7 +512,7 @@ const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const PARTS = {intro:"Opening", verse:"Verse", build:"Pre-chorus", chorus:"Chorus", break:"Bridge", final:"Final chorus", outro:"Outro"};
 const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
-  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", refine:false};
+  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", refine:false, h3_upscale:"auto"};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -866,6 +870,7 @@ async function viewBrief(){
           <label class="orow"><span>Seed (new number, new cast)</span><input id="seed" type="number" min="0" step="1"></label>
           <div class="ogroup">Checks and models</div>
           <label class="orow"><span>Refine details (LTX-2.5)</span><select id="refine"><option value="off">off</option><option value="on">on, slower</option></select></label>
+          <label class="orow"><span>Upscale (MiniMax H3)</span><select id="h3up"><option value="auto">SelfLift</option><option value="relayvsr">RelayVSR 2x</option></select></label>
           <label class="orow"><span>Take check retries</span><select id="qc"><option value="0">0, fastest</option><option value="1">1</option><option value="2">2</option><option value="3">3, cleanest</option></select></label>
           <div class="orow"><span>Model versions</span><div class="seg mini" role="group" aria-label="Model set" id="mset"></div></div>
           <p class="tiny" id="mnote" style="margin:0"></p>
@@ -990,12 +995,15 @@ async function viewBrief(){
     if (+b.seed !== DEFAULT_BRIEF.seed) ch.push(`Seed ${b.seed}`);
     if ((b.models || "auto") !== "auto") ch.push(`Models: ${b.models === "full" ? "Full" : "24 GB"}`);
     if (b.refine) ch.push(b.engine === "h3" || b.preset === "fast" ? "Refine details: on (LTX-2.5 Quality, Max or Ultra only)" : "Refine details: on");
+    if ((b.h3_upscale || "auto") === "relayvsr") ch.push(b.engine === "h3" ? "Upscale: RelayVSR 2x" : "Upscale: RelayVSR 2x (MiniMax H3 only)");
     $("#advnote").textContent = ch.length ? "Changed: " + ch.join(" · ") : "";
   };
   for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","cast_order","looks","framing","broll_style","qc"]) { const el = $("#"+k); el.value = String(b[k]); el.onchange = () => { b[k] = k === "qc" ? +el.value : el.value; saveBrief(); advNote(); }; }
   const seed = $("#seed"); seed.value = b.seed; seed.onchange = () => { b.seed = Math.max(0, parseInt(seed.value || "1", 10)); saveBrief(); advNote(); };
   const rf = $("#refine"); rf.value = b.refine ? "on" : "off";
   rf.onchange = () => { b.refine = rf.value === "on"; saveBrief(); advNote(); refreshEstimate(); };
+  const hu = $("#h3up"); hu.value = b.h3_upscale || "auto";
+  hu.onchange = () => { b.h3_upscale = hu.value; saveBrief(); advNote(); };
   const br = $("#broll"); br.value = String(b.broll); br.onchange = () => { b.broll = parseFloat(br.value); saveBrief(); advNote(); };
   $("#mset").addEventListener("click", advNote);
   advNote();
@@ -1014,6 +1022,61 @@ async function viewBrief(){
   if (!S.sys) loadSystem().then(drawTiers);
 }
 
+// no song: make one (fv/song.py). The World line and an optional style go to Gemma for the
+// lyrics, ACE-Step 1.5 sings them into the input folder, and the new song is picked.
+function drawSongMaker(){
+  const b = S.brief, mk = b.mk = Object.assign({style: "", len: 120, inst: false, lyrics: ""}, b.mk || {});
+  const st = $("#mkstyle"), ly = $("#mklyr"), inst = $("#mkinst"), go = $("#mkgo"), note = $("#mknote");
+  if (!st) return;
+  st.value = mk.style; ly.value = mk.lyrics; if (mk.lyrics) $("#mklyrbox").open = true;
+  st.oninput = () => { mk.style = st.value; saveBrief(); };
+  ly.oninput = () => { mk.lyrics = ly.value; saveBrief(); };
+  const lens = () => { $("#mklen").innerHTML = [[60,"1 min"],[120,"2 min"],[180,"3 min"]].map(([v,l]) =>
+      `<button type="button" class="opt" data-v="${v}" aria-pressed="${+mk.len===v}">${l}</button>`).join("");
+    $("#mklen").querySelectorAll("[data-v]").forEach(el => el.onclick = () => { mk.len = +el.dataset.v; saveBrief(); lens(); }); };
+  lens();
+  inst.setAttribute("aria-pressed", !!mk.inst);
+  inst.onclick = () => { mk.inst = !mk.inst; inst.setAttribute("aria-pressed", mk.inst); ly.disabled = mk.inst; saveBrief(); };
+  ly.disabled = !!mk.inst;
+  const busy = on => { go.disabled = on; st.disabled = on; };
+  const poll = async pid => {
+    busy(true); const t0 = Date.now();
+    for (;;){
+      if (!$("#mkgo")) return;  // the song section was redrawn: the next draw picks the job up again
+      let j; try{ j = await realApi("job/" + pid); }catch(e){ j = {state: "unknown"}; }
+      const el = Math.round((Date.now() - t0) / 1000);
+      if (j.state === "queued"){ note.textContent = `Waiting in ComfyUI's queue (${j.ahead} ahead)…`; }
+      else if (j.state === "running" || j.state === "unknown"){ note.textContent = `Writing the lyrics and singing them… ${el} s`; }
+      else if (j.state === "error"){ store.set("mkjob", ""); busy(false); note.textContent = "Couldn't make the song: " + j.error; return; }
+      else if (j.state === "done"){
+        store.set("mkjob", ""); busy(false);
+        if (!j.song || !j.song.song){ note.textContent = "The song job finished without a song (see the ComfyUI console)."; return; }
+        b.song = j.song.song; b.start = -1; if (!b.name) b.name = j.song.title; $("#pname").value = b.name; saveBrief();
+        toast(`Made “${j.song.title}”: ${j.song.bpm} BPM, ${j.song.key}. It's in the input folder under oneshot-mv-songs.`, 7000);
+        drawSong(); return;
+      }
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  };
+  go.onclick = async () => {
+    if (DEMO){ toast("Making a song isn't simulated in demo mode."); return; }
+    if (!b.theme.trim() && !mk.style.trim()){ note.textContent = "Write the World first (02 below), or give a style."; return; }
+    busy(true); note.textContent = "Queueing…";
+    try{
+      const r = await realApi("song", {world: b.theme, style: mk.style, seconds: mk.len, instrumental: mk.inst,
+                                        lyrics: mk.inst ? "" : mk.lyrics, seed: Math.floor(Math.random() * 2e9)});
+      store.set("mkjob", r.prompt_id); poll(r.prompt_id);
+    }catch(e){ busy(false); note.textContent = e.message; }
+  };
+  const pending = store.get("mkjob", "");
+  if (pending) poll(pending);
+  else realApi("songmaker").then(m => {
+    if (!m.node) note.textContent = "Restart ComfyUI (bottom left) to load the song maker.";
+    else if (m.missing.length){ go.disabled = true; note.textContent = "Needs the ACE-Step 1.5 files: " + m.missing.join(", "); }
+    else note.textContent = `About ${mk.len <= 60 ? "a minute" : "1–2 minutes"}.`;
+  }).catch(() => {});
+}
+
 async function drawSong(){
   const b = S.brief;
   $("#pname").placeholder = b.song ? songTitle(b.song) : "Named after the song";
@@ -1027,7 +1090,14 @@ async function drawSong(){
         <div class="muted" style="font-size:13px">WAV, MP3, FLAC or M4A. It goes into ComfyUI's input folder.</div>
         <input type="file" id="file" accept="audio/*,.wav,.mp3,.flac,.m4a,.ogg" class="hide">
       </div>
-      <label class="field" style="margin-top:14px">Or pick one already in ComfyUI's input folder<select id="songsel"><option value="">Loading…</option></select></label>`;
+      <label class="field" style="margin-top:14px">Or pick one already in ComfyUI's input folder<select id="songsel"><option value="">Loading…</option></select></label>
+      <div class="mksong" id="mksong">
+        <div class="hd"><b>No song? Make one</b><span class="muted" style="font-size:12.5px">Lyrics and music written for your World (02 below), then sung by ACE-Step 1.5 on this machine.</span></div>
+        <input type="text" id="mkstyle" maxlength="300" placeholder="Style, optional: “driving 80s synth-pop, female vocal”. Empty: picked to suit the World.">
+        <div class="row" style="gap:10px;flex-wrap:wrap"><span class="seg" id="mklen"></span><button type="button" class="opt" id="mkinst" aria-pressed="false">Instrumental</button></div>
+        <details id="mklyrbox"><summary>Your own lyrics (optional)</summary><textarea id="mklyr" placeholder="[Verse]&#10;…&#10;[Chorus]&#10;…&#10;Empty: written for you from the World."></textarea></details>
+        <div class="row" style="gap:12px;align-items:center"><button type="button" class="btn primary" id="mkgo">Make the song</button><span id="mknote" class="muted"></span></div>
+      </div>`;
     const dz = $("#dropz"), fi = $("#file");
     dz.onclick = () => fi.click();
     dz.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); fi.click(); } };
@@ -1035,6 +1105,7 @@ async function drawSong(){
     dz.ondragleave = () => dz.classList.remove("over");
     dz.ondrop = e => { e.preventDefault(); dz.classList.remove("over"); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); };
     fi.onchange = () => { if (fi.files[0]) upload(fi.files[0]); };
+    drawSongMaker();
     try{
       S.songs = await api("songs");
       const sel = $("#songsel");

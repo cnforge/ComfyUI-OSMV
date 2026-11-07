@@ -5,6 +5,7 @@ page and the API change without restarting ComfyUI.
 API (all JSON):
   GET  api/system            GPU, queue, optional models
   GET  api/songs             audio files in ComfyUI's input folder
+  POST api/song              {world, style, seconds, seed, instrumental, lyrics}: make a song (ACE-Step 1.5)
   GET  api/analyze?song=&seconds=&start=
                              duration, tempo, energy sections, a waveform, the part the run will use
   POST api/start             {song, theme, seconds, start, format, preset, fx, cuts_*, seed, render}
@@ -412,6 +413,8 @@ def _director_graph(b: dict) -> dict:
         d["models"] = b["models"]
     if b.get("refine") and _director_has("refine_details"):  # the Refine-Details pass (LTX-2.5)
         d["refine_details"] = True
+    if b.get("h3_upscale") == "relayvsr" and _director_has("h3_upscale"):  # H3 clips: RelayVSR 2x
+        d["h3_upscale"] = "relayvsr"
     if (b.get("direction") or "").strip() and _director_has("direction"):  # notes per part of the song
         d["direction"] = b["direction"].strip()
     if _director_has("engine"):  # the singer clips' video model (an older node renders LTX only)
@@ -455,6 +458,13 @@ def _job(pid: str) -> dict:
                     if ev == "execution_error" and isinstance(d, dict)), "")
         return {"state": "error", "error": msg.strip() or "the job failed (see the ComfyUI console)"}
     run = ""
+    for node_out in (h.get("outputs") or {}).values():  # a made song: its input-folder name and lyrics
+        for it in node_out.get("text", []) or []:
+            if isinstance(it, str) and it.startswith("{") and '"song"' in it:
+                try:
+                    return {"state": "done", "song": json.loads(it)}
+                except ValueError:
+                    pass
     for node_out in (h.get("outputs") or {}).values():
         for it in node_out.get("text", []) or []:
             if isinstance(it, dict) and it.get("filename") == "jobs.json":
@@ -909,7 +919,7 @@ def _edit_brief(d: str) -> dict | None:
          "seed": ins.get("seed"), "looks": ins.get("twins"), "framing": ins.get("framing"), "broll": ins.get("broll_share"),
          "broll_style": ins.get("broll_style"), "qc": ins.get("qc_retries"), "fx": ins.get("audio_fx"),
          "cast_order": ins.get("cast_order"), "crowd": ins.get("crowd"), "models": ins.get("models"),
-         "refine": bool(ins.get("refine_details")), "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
+         "refine": bool(ins.get("refine_details")), "h3_upscale": ins.get("h3_upscale") or "auto", "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
          "characters": [rel(x) for x in (ins.get("artist_image_path") or "").split("|") if x]}
     for k in ("cuts_low", "cuts_medium", "cuts_high"):
         b[k] = ins.get(k)
@@ -1405,6 +1415,10 @@ async def _api(request: web.Request, route: str) -> web.Response:
         return web.json_response(await _blocking(lambda: _fv("graphs").models_report()))
     if route == "runs":
         return web.json_response(await _blocking(_runs))
+    if route == "songmaker":  # can this ComfyUI make a song: the node loaded and the ACE-Step files
+        import nodes as comfy_nodes  # type: ignore
+        return web.json_response({"node": "FVSong" in comfy_nodes.NODE_CLASS_MAPPINGS,
+                                  "missing": await _blocking(lambda: _fv("song").missing())})
     if route.startswith("graph/"):  # a run's ComfyUI graph (API format) for the ComfyUI tab to open
         try:
             return web.json_response(await _blocking(_graph, route[6:], q.get("job", "")))
@@ -1463,6 +1477,19 @@ async def _api(request: web.Request, route: str) -> web.Response:
                 json.dump({"t": time.time(), "estimate": est, "render": bool(body.get("render")), "project": project,
                            "director": graph, "brief": brief, "output": None if _director_has("fps") else _output(body)}, f)
             return web.json_response({"prompt_id": pid, "estimate": est})
+        if route == "song":  # make the song: queued like any job, polled with api/job/<id>
+            import nodes as comfy_nodes  # type: ignore
+            if "FVSong" not in comfy_nodes.NODE_CLASS_MAPPINGS:
+                return web.json_response({"error": "Restart ComfyUI to make songs: the song node isn't loaded yet."}, status=400)
+            miss = await _blocking(lambda: _fv("song").missing())
+            if miss:
+                return web.json_response({"error": "ACE-Step 1.5 isn't installed: " + ", ".join(miss)}, status=400)
+            inp = {"world": str(body.get("world") or "")[:4000], "style": str(body.get("style") or "")[:400],
+                   "seconds": float(min(300, max(10, float(body.get("seconds") or 120)))),
+                   "seed": int(body.get("seed") or 1), "instrumental": bool(body.get("instrumental")),
+                   "lyrics": str(body.get("lyrics") or "")[:6000]}
+            pid = await _blocking(_queue_graph, {"1": {"class_type": "FVSong", "inputs": inp}})
+            return web.json_response({"prompt_id": pid})
         if route == "recut":
             d = _run_dir(body.get("run", ""))
             ok = ("none", "subtle", "intense")

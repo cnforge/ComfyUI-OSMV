@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import random
 
@@ -18,9 +19,10 @@ from .fv import broll as fv_broll
 from .fv import identity as fv_identity
 from .fv import critic as fv_critic
 from .fv import direction as fv_direction
+from .fv import song as fv_song
 
 CATEGORY = "OneShot MV"
-_MODULES = [beat, dsplan, formats, casting, faces, plan, pose, graphs, fv_theme, fv_direction, fv_broll, fv_identity, fv_critic, stems, audiofx, fx, finish, export, lipsync, qc, fv_assemble, director]
+_MODULES = [beat, dsplan, formats, casting, faces, plan, pose, graphs, fv_theme, fv_direction, fv_broll, fv_identity, fv_critic, fv_song, stems, audiofx, fx, finish, export, lipsync, qc, fv_assemble, director]
 
 
 def _reload():
@@ -242,6 +244,9 @@ class FVDirector:
                                "tooltip": "LTX-2.5 at Quality, Max or Ultra: after the take checks, every clip in the cut is "
                                           "re-rendered with Lightricks' Refine-Details IC-LoRA (tiled, 8 steps) for "
                                           "sharper texture, edges and grain. Adds time to every clip."}),
+            "h3_upscale": (["auto", "relayvsr"], {"default": "auto",
+                           "tooltip": "MiniMax H3 above its native size: auto lifts the clip with SelfLift (or scales it "
+                                      "up); relayvsr renders at the native size and upscales every clip 2x with RelayVSR."}),
             "dance_video_path": ("STRING", {"default": "", "tooltip": "Motion mode: path to the dance clip"}),
             "run_name": ("STRING", {"default": ""}),
             "twin_editor": (["klein", "qwen"], {"default": "klein"}),
@@ -332,7 +337,7 @@ class FVDirector:
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
             cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5",
-            direction="", refine_details=False):
+            direction="", refine_details=False, h3_upscale="auto"):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -353,7 +358,7 @@ class FVDirector:
                               crowd=crowd or "auto", models=models or "auto",
                               fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080),
                               engine="h3" if engine == "minimax-h3" else "ltx25", direction=direction or "",
-                              refine=bool(refine_details))
+                              refine=bool(refine_details), h3_upscale=h3_upscale or "auto")
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}
@@ -811,6 +816,36 @@ class FVTheme:
         return {"ui": {"text": [text]}, "result": (text,)}
 
 
+class FVSong:
+    """No song? Make one: Gemma 3 writes lyrics and a style for the World, then ACE-Step 1.5 XL
+    turbo sings it. The WAV goes to the input folder (oneshot-mv-songs/) next to its lyrics."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"world": ("STRING", {"default": "", "multiline": True}),
+                             "style": ("STRING", {"default": "", "multiline": False,
+                                                  "tooltip": "Genre, mood, voice. Empty: picked to suit the World."}),
+                             "seconds": ("FLOAT", {"default": 120.0, "min": 10.0, "max": 300.0, "step": 1.0}),
+                             "seed": ("INT", {"default": 1, "min": 0, "max": 2 ** 31 - 1}),
+                             "instrumental": ("BOOLEAN", {"default": False})},
+                "optional": {"lyrics": ("STRING", {"default": "", "multiline": True,
+                                                   "tooltip": "Your own lyrics, [Verse]/[Chorus] tags on their own lines. Empty: written for you."})}}
+
+    RETURN_TYPES = ("AUDIO", "STRING")
+    RETURN_NAMES = ("audio", "song")
+    FUNCTION = "run"
+    OUTPUT_NODE = True
+    CATEGORY = CATEGORY
+
+    def run(self, world, style, seconds, seed, instrumental, lyrics=""):
+        _reload()
+        r = fv_song.make(world, style, seconds, seed, instrumental, lyrics or "",
+                         input_dir=folder_paths.get_input_directory())
+        x, sr = stems.read_wav(os.path.join(folder_paths.get_input_directory(), r["song"]))
+        audio = {"waveform": torch.from_numpy(np.ascontiguousarray(x)).unsqueeze(0), "sample_rate": sr}
+        return {"ui": {"text": [json.dumps(r)]}, "result": (audio, r["song"])}
+
+
 NODE_CLASS_MAPPINGS = {
     "FVFreeMemory": FVFreeMemory,
     "FVKeep": FVKeep,
@@ -826,6 +861,7 @@ NODE_CLASS_MAPPINGS = {
     "FVLipSyncScore": FVLipSyncScore,
     "FVFaceMatch": FVFaceMatch,
     "FVTheme": FVTheme,
+    "FVSong": FVSong,
     "FVLoadImagePath": FVLoadImagePath,
     "FVLoadVideoPath": FVLoadVideoPath,
     "FVLoadAudioPath": FVLoadAudioPath,
@@ -848,4 +884,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "FVLipSyncScore": "OneShot MV: Lip Sync Score",
     "FVFaceMatch": "OneShot MV: Face Match",
     "FVTheme": "OneShot MV: Theme Preview",
+    "FVSong": "OneShot MV: Make a Song",
 }

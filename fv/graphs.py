@@ -387,7 +387,7 @@ CONTINUITY = "One continuous take with no cuts: the same person in the same plac
 def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
                audio_path=None, audio_seek=0.0, guide_video=None, guide_start=0.0,
                guide_strength=1.0, guide_face=True, save_pose=False, key_strengths=None,
-               keyframes=None, continuity=True, size=None, broll=False):
+               keyframes=None, continuity=True, size=None, broll=False, vsr=False):
     """One LTX clip. audio_path -> lip sync on a frozen vocal latent (voice);
     guide_video -> DWPose union-control guide (twins, motion).
     keyframes: [(image_path, frame_idx, strength)] pinned at later frames of the clip, in every
@@ -399,7 +399,7 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     if pr["engine"] == "h3":  # the same call renders on MiniMax H3 (its prompt written for it)
         return h3_render(preset=preset, fmt=fmt, key_path=key_path, prompt=prompt, frames=frames, seed=seed,
                          prefix=prefix, audio_path=audio_path, audio_seek=audio_seek, guide_video=guide_video,
-                         guide_start=guide_start, size=size, broll=broll)
+                         guide_start=guide_start, size=size, broll=broll, vsr=vsr)
     fps = pr["fps"]
     sizes = formats.stage_sizes(fmt, preset, size)
     g = Graph()
@@ -593,6 +593,42 @@ def _h3(g, pika=False):
     return dict(model=model, clip=O(clip), vae=O(vae), avae=O(avae))
 
 
+RELAYVSR = {"unet": "relayvsr_x2_lightx2v_int8_convrot.safetensors", "vae": "relayvsr_flash_vae_x2_fp32.safetensors"}
+
+
+def relayvsr_ready() -> bool:
+    """RelayVSR x2 (ComfyUI's RelayVSRConditioning and VSR Decode, Comfy-Org/RelayVSR's files)."""
+    if not (_has_node("RelayVSRConditioning") and _has_node("VSRDecode")):
+        return False
+    try:
+        import folder_paths  # type: ignore
+        return (RELAYVSR["unet"] in folder_paths.get_filename_list("diffusion_models")
+                and RELAYVSR["vae"] in folder_paths.get_filename_list("vae"))
+    except Exception:
+        return False
+
+
+def _relayvsr(g, images, seed):
+    """images 2x with RelayVSR: every 15th frame through the model (4 steps, cfg 1), the Flash
+    decoder restores every frame from the low-quality ones."""
+    model = g.add("UNETLoader", unet_name=RELAYVSR["unet"], weight_dtype="default")
+    try:  # comfy kitchen's int8 attention, when this GPU and ComfyUI have it (as the RelayVSR workflow)
+        import comfy.ldm.modules.attention as _att  # type: ignore
+        kitchen = bool(getattr(_att, "COMFY_KITCHEN_INT8_ATTENTION_IS_AVAILABLE", False))
+    except Exception:
+        kitchen = False
+    if kitchen and _has_node("ModelAttentionBackend"):
+        model = g.add("ModelAttentionBackend", model=O(model), attention="comfy kitchen attention")
+    cond = g.add("RelayVSRConditioning", model=O(model), images=images)
+    guider = g.add("CFGGuider", model=O(model), positive=O(cond, 0), negative=O(cond, 0), cfg=1.0)
+    s = g.add("SamplerCustomAdvanced", noise=O(g.add("RandomNoise", noise_seed=seed)), guider=O(guider),
+              sampler=O(g.add("KSamplerSelect", sampler_name="euler")),
+              sigmas=O(g.add("BasicScheduler", model=O(model), scheduler="simple", steps=4, denoise=1.0)),
+              latent_image=O(cond, 1))
+    vae = g.add("VAELoader", vae_name=RELAYVSR["vae"])
+    return O(g.add("VSRDecode", vae=O(vae), samples=O(s), images=images, detail=1.0))
+
+
 def h3_upscaler() -> str | None:
     """The H3 latent upscaler SelfLift lifts Quality clips with, or None (no SelfLift node or
     no upscaler file: Quality then renders at H3's native size and is scaled up)."""
@@ -609,7 +645,7 @@ def h3_upscaler() -> str | None:
 
 
 def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path=None, audio_seek=0.0,
-              guide_video=None, guide_start=0.0, size=None, broll=False):
+              guide_video=None, guide_start=0.0, size=None, broll=False, vsr=False):
     """One MiniMax H3 clip in reference mode (fv/h3.py writes its prompt): <Picture 1> the
     keyframe, also pinned as the first frame; <Audio 1> the clip's vocal, copied 1:1 and pinned
     at frame 0 so the mouth lands on it; <Video 1> (a look) the lead's clip, for the pose. The
@@ -625,7 +661,8 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
     w, h = size or formats.render_size(fmt, preset)
     nw, nh = formats.H3_NATIVE[fmt]
     lift = w * h > nw * nh
-    ups = h3_upscaler() if lift else None
+    vsr = bool(vsr) and lift and relayvsr_ready()  # RelayVSR: sample at the native size, then 2x
+    ups = h3_upscaler() if lift and not vsr else None
     rw, rh = (w, h) if ups or not lift else (nw, nh)  # the size H3 samples at
     g = Graph()
     m = _h3(g, pika)
@@ -665,6 +702,8 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
         s = g.add("SamplerCustomAdvanced", noise=O(g.add("RandomNoise", noise_seed=seed)), guider=O(guider),
                   sampler=O(euler), sigmas=O(sig), latent_image=lat)
     dec = O(g.add("VAEDecode", samples=O(s), vae=m["vae"]))
+    if vsr:
+        dec = _relayvsr(g, dec, seed)
     if (rw, rh) != (w, h):
         dec = O(g.add("ImageScale", image=dec, upscale_method="lanczos", width=w, height=h, crop="disabled"))
     if au is None:  # no vocal (b-roll): keep H3's own sound

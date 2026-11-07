@@ -55,7 +55,10 @@ the waiting ones; the page reloads once ComfyUI is back).
 
 1. **The Brief.** Name the project, then drop in a song. The waveform shows the low, medium and
    high energy sections and the stretch the video will use: drag the box to move it, click or
-   drag anywhere to listen from there. Optionally add **Characters**, one photo per person (up
+   drag anywhere to listen from there. No song? **Make one**: Gemma writes lyrics and a style
+   for your World (or use your own style and lyrics, or go instrumental), and
+   [ACE-Step 1.5](#make-a-song) sings it in a minute or two. The song lands in the input folder
+   under `oneshot-mv-songs/` and is picked for you. Optionally add **Characters**, one photo per person (up
    to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
    that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
@@ -263,6 +266,15 @@ It takes about 60% longer than a native-size clip. Without them, H3 quality rend
 native size and is scaled up. On a GPU with less than 40 GB, quality keeps the earlier sizes
 (1280×768 on LTX-2.5, 1344×768 on H3) to fit in memory.
 
+**Upscale: RelayVSR 2x** (Advanced, MiniMax H3) is the other way up from the native size: every H3
+clip renders all 8 steps at 1344×768, then [RelayVSR](https://kopperx.github.io/RelayVSR/) doubles
+it to 2688×1536 (4 steps, every 15th frame through the model, its Flash decoder restoring the
+rest), scaled to the delivery size. It needs a ComfyUI from 6 November 2026 or later (the
+RelayVSR Conditioning and VSR Decode nodes) and
+[Comfy-Org/RelayVSR](https://huggingface.co/Comfy-Org/RelayVSR)'s
+`relayvsr_x2_lightx2v_int8_convrot.safetensors` in `models/diffusion_models` and
+`relayvsr_flash_vae_x2_fp32.safetensors` in `models/vae`. Without them H3 falls back to SelfLift.
+
 Max renders LTX-2.5 clips with its full dev model instead of the 8-step distilled one: stage 1
 runs 20 steps at cfg 4 (so the negative prompt counts), and the upscale stage runs dev with the
 distilled LoRA at 0.6, LTX's own dev recipe. Faces and motion come out cleaner, at about 4× the
@@ -417,6 +429,7 @@ Each run has its own folder, `output/oneshot-mv/runs/<run>/`, with:
 | OneShot MV: Assemble | Cuts a run together with FX and the finish. Run it again to re-cut; nothing re-renders. |
 | OneShot MV: Run Result | Reports where a run is and returns the finished video as a job output (the SDK uses it). |
 | OneShot MV: Theme Preview | Shows what a World line turns into before you spend a run on it. |
+| OneShot MV: Make a Song | Writes lyrics for a World and sings them with ACE-Step 1.5 into the input folder. |
 | OneShot MV: Lip Sync Score | Scores a finished run's lip sync with SyncNet, take by take. |
 | OneShot MV: Finish | Applies the finish (grade, grain, vignette) to any frames. |
 | OneShot MV: Keep Models Loaded, Weight Backups to RAM, Free Memory | Memory helpers for the Director's jobs. |
@@ -436,6 +449,15 @@ LTX-2.3's Gemma 3) allow commercial use, outputs included. MiniMax H3, FastH3 an
 under the MiniMax H3 Community License. The optional insightface face models are for
 non-commercial research only, and LTX's licence asks you to label what you publish as
 AI-generated. Read each licence before you rely on it.
+
+### Make a song
+
+The Brief's **Make one** (and the Make a Song node) needs ACE-Step 1.5 XL turbo, about 20 GB, from
+[Comfy-Org/ace_step_1.5_ComfyUI_files](https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files):
+`acestep_v1.5_xl_turbo_bf16.safetensors` in `models/diffusion_models`,
+`qwen_0.6b_ace15.safetensors` and `qwen_4b_ace15.safetensors` in `models/text_encoders`, and
+`ace_1.5_vae.safetensors` in `models/vae`. The lyrics come from the Gemma 3 the Director already
+uses. ACE-Step is under its own licence: read it before you publish a song it made.
 
 ### Two model sets
 
