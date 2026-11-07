@@ -1764,7 +1764,10 @@ function wsFinish(body){
   const acc = (k, title, inner) => `<section class="card ed acc" data-acc="${k}"><button type="button" class="acc-h" aria-expanded="false" aria-controls="acc-${k}"><h3>${title}</h3><span class="acc-sum" id="sum-${k}"></span>${chev}</button><div class="acc-b" id="acc-${k}" hidden>${inner}</div></section>`;
   body.innerHTML = `<div class="refine">
     ${acc("fx", "Audio-reactive FX", `<p class="tiny">Flash, zoom punch, glow and color split on the drums, set for each energy in the song.</p><div class="fxrows" id="efx"></div>`)}
-    ${acc("grade", "Color grade", `<p class="tiny">None keeps the default look; the rest go on top of it. A still from your video shows each one.</p><div class="grades" role="group" aria-label="Color grade" id="grades"></div>`)}
+    ${acc("base", "Base look", `<p class="tiny">Under every cut: the World's ${esc(r.finish && r.finish.base_grade ? r.finish.base_grade + " " : "")}grade, a soft glow, contrast and a naturalistic base. 0% keeps the colour your clips were rendered with; the color grade below still goes on top.</p>
+      <label class="slider"><span>Strength</span><input type="range" id="bs" min="0" max="100" step="5"><b class="mono" id="bsv"></b></label>
+      <div class="grainprev"><img id="baseimg" alt="A still from your video with this base look"></div>`)}
+    ${acc("grade", "Color grade", `<p class="tiny">None keeps the base look; the rest go on top of it. A still from your video shows each one.</p><div class="grades" role="group" aria-label="Color grade" id="grades"></div>`)}
     ${acc("grain", "Grain", `<label class="slider"><span>Intensity</span><input type="range" id="gi" min="0" max="100" step="1"><b class="mono" id="giv"></b></label>
       <label class="slider"><span>Size</span><input type="range" id="gs" min="0.5" max="4" step="0.5"><b class="mono" id="gsv"></b></label>
       <div class="grainprev"><img id="grainimg" alt="The middle of a frame at 1080p, pixel for pixel, with this grain"></div><p class="tiny" style="margin:6px 0 0">Pixel for pixel at 1080p: the grain goes on after the upscale.</p>`)}
@@ -1774,7 +1777,7 @@ function wsFinish(body){
     ${r.brief.format === "16:9" ? `<section class="card ed vert"><h3>9:16 version</h3><p class="tiny">For Reels, TikTok and Shorts: each shot cropped around the singer's face, held still or following them, never moving across a cut. About a minute; nothing re-renders.</p>
       <button class="btn" id="vmake" type="button" style="width:100%">${r.vertical ? "Show the 9:16 version" : "Make the 9:16 version"}</button></section>` : ""}</div>`;
   const ENERGIES = [["low", "Low energy sections"], ["medium", "Medium energy sections"], ["high", "High energy sections"]];
-  const dirty = () => JSON.stringify(E.fx) !== JSON.stringify(F0.fx) || ["look", "grain", "grain_size", "vignette"].some(k => String(E[k]) !== String(F0[k]));
+  const dirty = () => JSON.stringify(E.fx) !== JSON.stringify(F0.fx) || ["look", "grain", "grain_size", "vignette", "base_strength"].some(k => String(E[k]) !== String(F0[k]));
   const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
   const drawFxSeg = () => {
     $("#efx").innerHTML = ENERGIES.map(([k, label]) => `<div class="fxrow"><span class="fxlab"><i style="background:${LEVEL_COL[k]}"></i>${label}</span>
@@ -1785,33 +1788,40 @@ function wsFinish(body){
   };
   const grades = r.looks || [{id: "none", name: "None"}];  // None first: the default
   const drawGrades = () => {
-    $("#grades").innerHTML = grades.map(l => `<button type="button" class="grade" data-l="${l.id}" aria-pressed="${E.look === l.id}"><span class="gimg"><img src="/oneshot-mv/api/look/${encodeURIComponent(r.run)}?look=${l.id}&w=320&v=${esc(r.looks_sig || "")}" alt="" onload="this.parentNode.classList.add('ok')"></span><span class="gname">${esc(l.name)}</span></button>`).join("");
+    $("#grades").innerHTML = grades.map(l => `<button type="button" class="grade" data-l="${l.id}" aria-pressed="${E.look === l.id}"><span class="gimg"><img src="/oneshot-mv/api/look/${encodeURIComponent(r.run)}?look=${l.id}&w=320&b=${E.base_strength ?? 1}&v=${esc(r.looks_sig || "")}" alt="" onload="this.parentNode.classList.add('ok')"></span><span class="gname">${esc(l.name)}</span></button>`).join("");
     $("#grades").querySelectorAll(".grade").forEach(el => el.onclick = () => { E.look = E.look === el.dataset.l ? "none" : el.dataset.l; drawGrades(); drawApply(); drawGrain(); });
     const lk = grades.find(l => l.id === E.look); $("#sum-grade").textContent = lk ? lk.name : "None";
   };
   const gi = $("#gi"), gs = $("#gs"), vg = $("#vg");
   const drawSliders = () => { gi.value = Math.round(E.grain / 0.2 * 100); $("#giv").textContent = gi.value + "%"; gs.value = E.grain_size; $("#gsv").textContent = ({0.5: "finest", 1: "fine", 1.5: "fine+", 2: "medium", 2.5: "medium+", 3: "coarse", 3.5: "coarse+", 4: "chunky"})[E.grain_size] || E.grain_size; vg.value = Math.round(E.vignette * 100); $("#vgv").textContent = vg.value + "%";
+    const bsv = Math.round((E.base_strength ?? 1) * 100); $("#bs").value = bsv; $("#bsv").textContent = bsv + "%"; $("#sum-base").textContent = bsv ? bsv + "%" : "Off";
     $("#sum-grain").textContent = +E.grain > 0 ? `${gi.value}% · ${$("#gsv").textContent}` : "Off"; $("#sum-vig").textContent = +E.vignette > 0 ? vg.value + "%" : "Off"; };
   let grainT = 0;
   const drawGrain = () => { clearTimeout(grainT); grainT = setTimeout(() => { const im = $("#grainimg"); if (!im) return;
     const px = Math.round((im.parentNode.clientWidth || 300) * (window.devicePixelRatio || 1) / 16) * 16;
-    im.src = `/oneshot-mv/api/grain/${encodeURIComponent(r.run)}?look=${encodeURIComponent(E.look || "none")}&g=${E.grain}&s=${E.grain_size}&w=${px}&v=${esc(r.looks_sig || "")}`; }, 250); };
+    im.src = `/oneshot-mv/api/grain/${encodeURIComponent(r.run)}?look=${encodeURIComponent(E.look || "none")}&g=${E.grain}&s=${E.grain_size}&w=${px}&b=${E.base_strength ?? 1}&v=${esc(r.looks_sig || "")}`; }, 250); };
   gi.oninput = () => { E.grain = Math.round(+gi.value * 0.2 * 10) / 1000; drawSliders(); drawApply(); drawGrain(); };
   gs.oninput = () => { E.grain_size = +gs.value; drawSliders(); drawApply(); drawGrain(); };
   vg.oninput = () => { E.vignette = +vg.value / 100; drawSliders(); drawApply(); };
+  let baseT = 0;
+  const drawBase = () => { clearTimeout(baseT); baseT = setTimeout(() => { const im = $("#baseimg"); if (!im) return;
+    im.src = `/oneshot-mv/api/look/${encodeURIComponent(r.run)}?look=${encodeURIComponent(E.look || "none")}&w=640&b=${E.base_strength ?? 1}&v=${esc(r.looks_sig || "")}`; }, 250); };
+  $("#bs").oninput = () => { E.base_strength = +$("#bs").value / 100; drawSliders(); drawApply(); drawBase(); };
+  $("#bs").onchange = () => drawGrades();
   const drawApply = () => { const a = $("#apply"), d = dirty(); a.disabled = !d || shooting; a.classList.toggle("primary", d && !shooting); a.innerHTML = d ? 'Apply changes <span class="eta-b">about 2 min</span>' : "No changes yet"; };
   drawFxSeg(); drawGrades(); drawSliders(); drawApply();
   // one panel open at a time; the open one is remembered across cuts
   const openPanel = k => { REFINE_OPEN = k;
     body.querySelectorAll(".acc").forEach(sec => { const on = sec.dataset.acc === k;
       sec.classList.toggle("open", on); sec.querySelector(".acc-h").setAttribute("aria-expanded", String(on)); sec.querySelector(".acc-b").hidden = !on; });
-    if (k === "grain") drawGrain(); };
+    if (k === "grain") drawGrain();
+    if (k === "base") drawBase(); };
   body.querySelectorAll(".acc-h").forEach(b => b.onclick = () => { const k = b.parentNode.dataset.acc; openPanel(REFINE_OPEN === k ? null : k); });
   openPanel(REFINE_OPEN);
   $("#apply").onclick = async () => {
     try{
-      overlay("Making the new cut", "The same shots with the new FX, grade, grain and vignette. Nothing re-renders.");
-      const {prompt_id} = await api("recut", {run: r.run, fx: E.fx, look: E.look, grain: E.grain, grain_size: E.grain_size, vignette: E.vignette});
+      overlay("Making the new cut", "The same shots with the new FX, base look, grade, grain and vignette. Nothing re-renders.");
+      const {prompt_id} = await api("recut", {run: r.run, fx: E.fx, look: E.look, grain: E.grain, grain_size: E.grain_size, vignette: E.vignette, base_strength: E.base_strength});
       const t0 = Date.now();
       for (;;){ await new Promise(res => setTimeout(res, 2000)); const j = await api("job/" + prompt_id); if (j.state === "error") throw new Error(j.error); if (j.state === "done") break;
         $("#ovs").textContent = `${j.state === "queued" ? "Waiting in the queue" : "Cutting"} · ${clock((Date.now() - t0) / 1000)}`; }

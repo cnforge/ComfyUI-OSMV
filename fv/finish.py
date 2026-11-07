@@ -77,7 +77,7 @@ BASE_LOOK = "natural"  # under every grade, "None" included; not offered as a gr
 
 # the Studio's starting settings for every run: no grade on top of the base,
 # 25% grain at the finest size, no vignette (audio-reactive FX start at subtle, in fx.py)
-STUDIO_DEFAULTS = {"look": "none", "grain": 0.05, "grain_size": 0.5, "vignette": 0.0}
+STUDIO_DEFAULTS = {"look": "none", "grain": 0.05, "grain_size": 0.5, "vignette": 0.0, "base_strength": 1.0}
 
 # the reference and what each look is after
 LOOK_NOTES = {
@@ -265,6 +265,7 @@ class Finisher:
         import torch.nn.functional as F
         c = self.cfg
         x = img.float()
+        clip = x.clamp(0, 1)
         H, W = x.shape[:2]
         # 1) grade toward the reference look
         if self.src is not None and c.get("grade_amount", 0) > 0:
@@ -300,6 +301,10 @@ class Finisher:
         base = c.get("base_look", BASE_LOOK)
         if base and base != "none":
             x = apply_look(x, base, c.get("base_amount", 1.0))
+        # Finish's Base look: how much of 1) to 3b) the cut keeps (0 = the clips' own colour)
+        k = float(c.get("base_strength", 1.0))
+        if k < 1:
+            x = clip + (x - clip) * max(0.0, k)
         if c.get("look") and c["look"] != "none":
             x = apply_look(x, c["look"], c.get("look_amount", 1.0))
         return x.clamp(0, 1)

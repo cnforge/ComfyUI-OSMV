@@ -1209,7 +1209,8 @@ def _finish_cfg(p: dict) -> dict:
 def _finish_settings(p: dict) -> dict:
     c = _finish_cfg(p)
     return {"look": c.get("look", "none"), "grain": round(float(c.get("grain", 0.05)), 3),
-            "grain_size": round(float(c.get("grain_size", 0.5)), 2), "vignette": round(float(c.get("vignette", 0.0)), 3)}
+            "grain_size": round(float(c.get("grain_size", 0.5)), 2), "vignette": round(float(c.get("vignette", 0.0)), 3),
+            "base_strength": round(float(c.get("base_strength", 1.0)), 2), "base_grade": (p.get("theme") or {}).get("grade", "")}
 
 
 def _preview_frame(d: str, p: dict, shot: int | None):
@@ -1284,7 +1285,7 @@ def _file_sig(path: str) -> str:
     return hashlib.md5(open(path, "rb").read()).hexdigest()[:10]
 
 
-def _look_preview(name: str, look: str, shot: int | None, w: int = 560) -> str:
+def _look_preview(name: str, look: str, shot: int | None, w: int = 560, base: float = 1.0) -> str:
     from PIL import Image
     if look not in _look_names():
         look = "none"
@@ -1292,18 +1293,20 @@ def _look_preview(name: str, look: str, shot: int | None, w: int = 560) -> str:
     p = _load(os.path.join(d, "plan.json"), {}) or {}
     w = max(240, min(1600, int(w)))
     # the grade alone: grain and vignette come after it, with their own sliders
-    key = hashlib.sha1(json.dumps([look, shot, w, "grade-only",
+    base = round(min(1.0, max(0.0, float(base))), 2)
+    key = hashlib.sha1(json.dumps([look, shot, w, "grade-only", base,
                                    (p.get("finish") or {}).get("grade_mean"),
                                    _file_sig(_fv("finish").__file__)]).encode()).hexdigest()[:12]
     out = os.path.join(d, "studio_previews", f"{look}_{key}.jpg")
     if not os.path.exists(out):
         frame, _ = _preview_frame(d, p, shot)
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        Image.fromarray(_graded(d, p, frame, look, {"grain": 0, "vignette": 0}, w=w)).save(out, quality=88)
+        Image.fromarray(_graded(d, p, frame, look, {"grain": 0, "vignette": 0, "base_strength": base}, w=w)).save(out, quality=88)
     return out
 
 
-def _grain_preview(name: str, look: str, grain: float, size: float, shot: int | None = None, cw_px: int = 640) -> str:
+def _grain_preview(name: str, look: str, grain: float, size: float, shot: int | None = None, cw_px: int = 640,
+                   base: float = 1.0) -> str:
     """A 1:1 crop of a delivery-size frame with the grain on, made the way the cut makes it:
     the grade at render size, the upscale, then the grain."""
     import torch.nn.functional as F
@@ -1314,16 +1317,17 @@ def _grain_preview(name: str, look: str, grain: float, size: float, shot: int | 
     grain = round(min(0.2, max(0.0, float(grain))), 3)
     size = round(min(4.0, max(0.5, float(size))) * 2) / 2
     cw_px = max(160, min(960, int(cw_px)))
+    base = round(min(1.0, max(0.0, float(base))), 2)
     d = _run_dir(name)
     p = _load(os.path.join(d, "plan.json"), {}) or {}
-    key = hashlib.sha1(json.dumps([look, grain, size, shot, cw_px, _file_sig(_fv("finish").__file__),
+    key = hashlib.sha1(json.dumps([look, grain, size, shot, cw_px, base, _file_sig(_fv("finish").__file__),
                                    (p.get("finish") or {}).get("grade_mean")]).encode()).hexdigest()[:12]
     out = os.path.join(d, "studio_previews", f"grain_{key}.jpg")
     if os.path.exists(out):
         return out
     frame, _ = _preview_frame(d, p, shot)
     cfg = _finish_cfg(p)
-    cfg.update({"look": look, "grain": grain, "grain_size": size, "vignette": 0})
+    cfg.update({"look": look, "grain": grain, "grain_size": size, "vignette": 0, "base_strength": base})
     fin = _fv("finish").Finisher(cfg, _lab_cache(d, p), seed=3)
     y = fin.grade(frame)
     rw, rh = formats.render_size(p["format"], p["preset"], p)
@@ -1414,12 +1418,12 @@ async def _api(request: web.Request, route: str) -> web.Response:
     if route.startswith("look/"):
         shot = q.get("shot")
         path = await _blocking(_look_preview, route[5:], q.get("look", "none"), int(shot) if shot not in (None, "") else None,
-                               int(q.get("w") or 560))
+                               int(q.get("w") or 560), q.get("b", 1.0))
         return web.FileResponse(path, headers={"Cache-Control": "max-age=3600"})
     if route.startswith("grain/"):
         shot = q.get("shot")
         path = await _blocking(_grain_preview, route[6:], q.get("look", "none"), q.get("g", 0.05), q.get("s", 1.0),
-                               int(shot) if shot not in (None, "") else None, int(q.get("w") or 640))
+                               int(shot) if shot not in (None, "") else None, int(q.get("w") or 640), q.get("b", 1.0))
         return web.FileResponse(path, headers={"Cache-Control": "max-age=3600"})
     if route.startswith("run/"):
         return web.json_response(await _blocking(_run, route[4:]))
@@ -1476,7 +1480,7 @@ async def _api(request: web.Request, route: str) -> web.Response:
                 fu = dict(plan_.get("finish_user") or {})
                 if body.get("look") is not None:
                     fu["look"] = str(body["look"]) if str(body["look"]) in _look_names() else "none"
-                for k, lo, hi in (("grain", 0.0, 0.2), ("grain_size", 0.5, 4.0), ("vignette", 0.0, 0.95)):
+                for k, lo, hi in (("grain", 0.0, 0.2), ("grain_size", 0.5, 4.0), ("vignette", 0.0, 0.95), ("base_strength", 0.0, 1.0)):
                     if body.get(k) is not None:
                         fu[k] = round(min(hi, max(lo, float(body[k]))), 3)
                 plan_["finish_user"] = fu
