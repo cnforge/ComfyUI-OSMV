@@ -138,6 +138,12 @@ them with:
 - **music made for it** (ACE-Step 1.5, written from the script, instrumental by default), or
 - **silence**.
 
+Dialogue: write it as a screenplay (`GEORGE: "My uncle died."`) and every line is kept word for
+word and in order, one or two lines a shot, with the speaker in frame; shots without lines are told
+that nobody speaks. Without music the film runs as long as its lines need, and the cut listens to
+every take (Whisper) and ends each shot just after its last scripted word, so a line is never cut
+off and the talk a model makes up to fill a long clip is left out.
+
 The film's page shows the cut, every shot with its description, the bible and the script. Change
 the grade and **Re-cut** (nothing re-renders), or **Re-shoot** a shot: it renders a new take and
 cuts again. A 15-second ad on LTX-2.5 Fast takes under 2 minutes on an RTX PRO 6000. Films are in

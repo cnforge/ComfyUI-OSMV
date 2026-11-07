@@ -870,6 +870,10 @@ class FVFilm:
                              "resolution": (["720", "1080", "1440", "2160"], {"default": "1080"}),
                              "run_name": ("STRING", {"default": ""})}}
 
+    @classmethod
+    def IS_CHANGED(cls, **kw):
+        return float("nan")  # reads and writes files: never served from ComfyUI's cache
+
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("film_dir",)
     FUNCTION = "run"
@@ -900,6 +904,10 @@ class FVFilmCut:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"film_dir": ("STRING", {"default": ""})}}
+
+    @classmethod
+    def IS_CHANGED(cls, **kw):
+        return float("nan")  # reads and writes files: never served from ComfyUI's cache
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("video",)

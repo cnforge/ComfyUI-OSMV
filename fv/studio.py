@@ -1457,6 +1457,7 @@ def _film_reshoot(run: str, shots: list[int]) -> dict:
         take = len(glob.glob(os.path.join(d, f"s{i:03d}_*.mp4")))
         ids.append(_queue_graph(fm.shot_job(f, i, f["seed"] * 1000 + i + 7919 * take, take=take)))
     if ids:
+        fm.save(f)  # the re-shot shots' prompts
         ids.append(_queue_graph(fm.cut_graph(d)))
     return {"queued": len(ids)}
 
