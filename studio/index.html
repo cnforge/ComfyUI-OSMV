@@ -111,6 +111,11 @@ h1{margin:0;font-size:28px;line-height:1.1;font-weight:700;letter-spacing:-.02em
 .opt{min-height:30px;padding:0 11px;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;background:var(--panel2);color:var(--muted);border:1px solid var(--line2)}
 .opt:hover{color:var(--text);border-color:var(--line3)}
 .opt[aria-pressed=true]{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent)}
+.optnum{display:inline-flex;align-items:center;gap:4px;padding:0 9px 0 4px;cursor:text}
+.optnum input[type=number],.optnum input[type=number]:focus{width:52px;height:26px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:right;padding:0 2px;outline:none;box-shadow:none;-moz-appearance:textfield}
+.optnum input::-webkit-outer-spin-button,.optnum input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.optnum input::placeholder{color:var(--dim);font-weight:500}
+.optnum:focus-within{border-color:var(--accent)}
 .seg.mini{flex-wrap:nowrap;gap:3px}
 .seg.mini .opt{min-height:28px;padding:0 9px;font-size:12px}
 
@@ -1051,10 +1056,19 @@ function drawWave(){
   for (let t = 0; t < d - step * .4; t += step) tk.push(`<span style="left:${t/d*100}%">${clock(t)}</span>`);
   tk.push(`<span style="right:0">${clock(d)}</span>`);
   $("#ticks").innerHTML = tk.join("");
-  const lens = [[15,"15 s"],[30,"30 s"],[60,"60 s"],[0,"Whole song"]];
+  const lens = [[15,"15 s"],[30,"30 s"],[60,"60 s"],[0,"Whole song"]], custom = !lens.some(l => +b.seconds === l[0]);
+  const maxLen = Math.max(5, Math.min(600, Math.floor(d)));
   $("#lens").innerHTML = lens.map(l => `<button type="button" class="opt" data-l="${l[0]}" aria-pressed="${+b.seconds===l[0]}">${l[1]}</button>`).join("")
+    + `<label class="opt optnum" aria-pressed="${custom}" title="Any length from 5 s to ${maxLen} s"><input type="number" id="lencust" min="5" max="${maxLen}" step="1" inputmode="numeric" placeholder="Custom" aria-label="Custom length in seconds" value="${custom ? Math.round(+b.seconds) : ""}"><span>s</span></label>`
     + `<button type="button" class="opt" id="auto" aria-pressed="${+b.start<0}" title="Let the Studio pick the strongest part">Auto</button>`;
   $("#lens").querySelectorAll("[data-l]").forEach(el => el.onclick = () => { b.seconds = +el.dataset.l; saveBrief(); drawSong(); viewBriefTiersRefresh(); });
+  const lc = $("#lencust");
+  lc.onchange = () => {
+    const v = Math.round(+lc.value);
+    if (!(v > 0)){ lc.value = custom ? Math.round(+b.seconds) : ""; return; }
+    b.seconds = Math.max(5, Math.min(maxLen, v)); saveBrief(); drawSong(); viewBriefTiersRefresh();
+  };
+  lc.onkeydown = e => { if (e.key === "Enter") lc.blur(); };
   $("#auto").onclick = () => { b.start = -1; saveBrief(); drawSong(); };
   $("#winnote").textContent = (+b.start < 0 ? (movable ? "Picked for you: the strongest stretch, with the drop or chorus early on. Drag the box to start somewhere else." : "The whole song.")
     : `Starts at ${clock(w0)} (moved to the nearest bar line). Auto lets the Studio pick.`) + " Click or drag the waveform to listen from anywhere.";
