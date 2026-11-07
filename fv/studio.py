@@ -14,6 +14,7 @@ API (all JSON):
                              the stage, the notes from the vision check and take QC, the video
   POST api/recut             {run, fx}: a new cut at another FX level, nothing re-rendered
   POST api/cancel            {run}: removes the run's queued jobs and stops the one running
+  POST api/restart           {force}: restarts ComfyUI (refused while jobs are queued, unless force)
   GET  api/runs              recent runs, newest first
 """
 from __future__ import annotations
@@ -527,6 +528,28 @@ def _cancel(name: str) -> dict:
             import comfy.model_management as mm
             mm.interrupt_current_processing()
     return {"removed": len(ids), "stopped": len(running)}
+
+
+def _restart_now() -> None:
+    """Replace this ComfyUI process with a fresh one, same command line (as ComfyUI-Manager's
+    reboot does outside comfy-cli). The queue is in memory, so it is lost."""
+    import sys
+    import logging
+    logging.info("[OneShotMV] Studio: restarting ComfyUI")
+    for f in (sys.stdout, sys.stderr):
+        try:
+            f.flush()
+        except Exception:
+            pass
+    if os.environ.get("__COMFY_CLI_SESSION__"):  # comfy-cli restarts it when it exits with this marker
+        open(os.environ["__COMFY_CLI_SESSION__"] + ".reboot", "w").close()
+        os._exit(0)
+    args = [a for a in sys.argv if a != "--windows-standalone-build"]
+    if args and args[0].endswith("__main__.py"):
+        cmd = [sys.executable, "-m", os.path.basename(os.path.dirname(args[0]))] + args[1:]
+    else:
+        cmd = [sys.executable] + args
+    os.execv(sys.executable, cmd)
 
 
 # ------------------------------------------------------------------ a run, for the page
@@ -1485,4 +1508,11 @@ async def _api(request: web.Request, route: str) -> web.Response:
         if route == "cancel":
             d = _run_dir(body.get("run", ""))
             return web.json_response(await _blocking(_cancel, os.path.basename(d)))
+        if route == "restart":
+            running, pending = _queue_lists()
+            if (running or pending) and not body.get("force"):
+                return web.json_response({"error": f"ComfyUI is busy ({len(running)} running, {len(pending)} waiting)",
+                                          "running": len(running), "pending": len(pending)}, status=409)
+            asyncio.get_running_loop().call_later(0.5, _restart_now)  # answer the page first
+            return web.json_response({"restarting": True, "dropped": len(running) + len(pending)})
     return web.json_response({"error": f"unknown api '{route}'"}, status=404)

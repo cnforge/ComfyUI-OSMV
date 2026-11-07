@@ -57,6 +57,8 @@ button{font:inherit;color:inherit}
 .chip .led.off{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 18%,transparent)}
 .toplink{font-size:12.5px;font-weight:600;text-decoration:none;color:var(--muted)}
 .toplink:hover{color:var(--text)}
+.linkbtn{background:none;border:0;padding:0;cursor:pointer;text-align:left;font-family:inherit}
+.linkbtn:disabled{cursor:default;color:var(--dim)}
 .credit{font-size:11px;color:var(--dim)}
 .credit a{color:var(--dim)}
 
@@ -475,6 +477,7 @@ canvas.twave{display:block;height:46px;cursor:pointer}
   <div class="sfoot">
     <span class="chip" id="sys"><span class="led" aria-hidden="true"></span>ComfyUI</span>
     <a class="toplink" id="comfy" href="/" target="_blank" rel="noopener">Open ComfyUI ↗</a>
+    <button class="toplink linkbtn" id="restart" type="button" title="Restart ComfyUI, e.g. after updating the pack. The page reloads when it's back.">Restart ComfyUI</button>
     <span class="credit">Built on the <a href="https://github.com/VisualFrisson/ComfyUI-OneShotMV" target="_blank" rel="noopener">OneShot MV</a> engine</span>
   </div>
 </aside>
@@ -755,6 +758,35 @@ async function loadSystem(){
   }catch(e){
     $("#sys").innerHTML = `<span class="led off" aria-hidden="true"></span>ComfyUI not reachable`;
   }
+}
+
+// restart ComfyUI: always asked first, and more firmly when jobs are queued (a restart drops the
+// queue and stops the running job); then the page waits for ComfyUI to go down and come back
+async function restartComfy(){
+  if (DEMO) return toast("Demo mode: ComfyUI isn't restarted.");
+  let q = {running: 0, pending: 0};
+  try{ q = (await api("system")).queue; }catch(e){}
+  const busy = q.running + q.pending;
+  const msg = busy
+    ? `ComfyUI is busy: ${q.running} job${q.running === 1 ? "" : "s"} running, ${q.pending} waiting.\n\nRestarting stops the running job and drops every waiting one. A video that's rendering stops, and you'd resubmit it from its brief.\n\nRestart anyway?`
+    : "Restart ComfyUI? It takes a minute or so; this page reloads when it's back.";
+  if (!confirm(msg)) return;
+  const btn = $("#restart"); btn.disabled = true; btn.textContent = "Restarting…";
+  try{ await api("restart", {force: busy > 0}); }
+  catch(e){ btn.disabled = false; btn.textContent = "Restart ComfyUI"; return toast(e.message); }
+  stopTimer();
+  $("#sys").innerHTML = `<span class="led off" aria-hidden="true"></span><span>ComfyUI restarting…</span>`;
+  toast("Restarting ComfyUI. This page reloads when it's back.");
+  const t0 = Date.now(); let wentDown = false;
+  const poll = async () => {
+    try{
+      const r = await fetch("/oneshot-mv/api/system", {cache: "no-store"});
+      if (r.ok && (wentDown || Date.now() - t0 > 20000)) return location.reload();
+    }catch(e){ wentDown = true; }
+    if (Date.now() - t0 > 600000){ btn.disabled = false; btn.textContent = "Restart ComfyUI"; return toast("ComfyUI didn't come back after 10 minutes: check its console."); }
+    setTimeout(poll, 2000);
+  };
+  setTimeout(poll, 1500);
 }
 
 // ---------------------------------------------------------------- 1. The Brief
@@ -1829,6 +1861,7 @@ function drawIcon(){
 drawIcon();
 demoBar();
 loadSystem();
+$("#restart").onclick = restartComfy;
 setInterval(loadSystem, 30000);
 route();
 </script>
