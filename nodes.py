@@ -239,7 +239,7 @@ class FVDirector:
                                      "on every shot. Each shot's notes shape its portrait; sung clips keep the "
                                      "performance alone (better lip sync), cutaways get the gist."}),
             "refine_details": ("BOOLEAN", {"default": False,
-                               "tooltip": "LTX-2.5 at Quality or Max: after the take checks, every clip in the cut is "
+                               "tooltip": "LTX-2.5 at Quality, Max or Ultra: after the take checks, every clip in the cut is "
                                           "re-rendered with Lightricks' Refine-Details IC-LoRA (tiled, 8 steps) for "
                                           "sharper texture, edges and grain. Adds time to every clip."}),
             "dance_video_path": ("STRING", {"default": "", "tooltip": "Motion mode: path to the dance clip"}),

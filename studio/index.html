@@ -665,7 +665,7 @@ const gpuName = g => String(g || "").replace(/^NVIDIA\s+/i, "").replace(/\s+(Bla
 const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; const m = Math.round(s / 60); return mins(m); };
 // minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
 function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
-  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({max: 10, quality: 2.5}[b.preset] || 1);
+  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({ultra: 58, max: 10, quality: 2.5}[b.preset] || 1);
   const refine = b.refine && b.engine !== "h3" && b.preset !== "fast" ? REFINE_PER_S : 0;
   return 6 + (per + refine) * sec; }
 // minutes of Refine-Details pass per second of video: 81 s for a 65-frame 1152x1920 clip, and a cut renders
@@ -876,7 +876,8 @@ async function viewBrief(){
     $("#fmts").querySelectorAll(".fmt").forEach(el => el.onclick = () => { b.format = el.dataset.f; saveBrief(); drawFmt(); drawTiers(); });
   };
   // the clips' render size per format (fv/formats.py); scaled to the delivery size in the cut
-  const RSIZE = {ltx25: {max: {"16:9": "1920×1152", "9:16": "1152×1920", "1:1": "1536×1536"},
+  const RSIZE = {ltx25: {ultra: {"16:9": "2560×1536", "9:16": "1536×2560", "1:1": "2048×2048"},
+                         max: {"16:9": "1920×1152", "9:16": "1152×1920", "1:1": "1536×1536"},
                          quality: {"16:9": "1920×1152", "9:16": "1152×1920", "1:1": "1536×1536"},
                          fast: {"16:9": "896×512", "9:16": "512×896", "1:1": "768×768"}},
                  h3: {quality: {"16:9": "1920×1088", "9:16": "1088×1920", "1:1": "1088×1088"},
@@ -888,7 +889,7 @@ async function viewBrief(){
     const k = r / Math.min(w, h), ev = x => Math.round(x * k / 2) * 2; return `${ev(w)}×${ev(h)}`; };
   const drawTiers = () => {
     const eng = b.engine === "h3" ? "h3" : "ltx25", rs = RSIZE[eng];
-    if (eng === "h3" && b.preset === "max") b.preset = "quality";  // H3 has no Max
+    if (eng === "h3" && (b.preset === "max" || b.preset === "ultra")) b.preset = "quality";  // H3 has no Max or Ultra
     if (eng === "ltx25" && b.preset === "pika") b.preset = "quality";  // Pika is an H3 LoRA
     $("#engs").innerHTML = ENGINES.map(([k, n]) => `<button type="button" class="opt" data-v="${k}" aria-pressed="${eng === k}">${n}</button>`).join("");
     $("#engs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.engine = el.dataset.v; saveBrief(); drawTiers(); if (S.models) drawModels(); });
@@ -897,7 +898,8 @@ async function viewBrief(){
       ? [["quality","Quality",rs.quality[f],"MiniMax H3 at 1080p, 24 fps: rendered at its native size, then lifted with its latent upscaler. Your vocal copied 1:1, the lyrics in every prompt. The slowest."],
          ["pika","Pika",rs.quality[f],"Every clip on the Pika-H3-Flex LoRA: 6 steps instead of 8, at Quality's size: about 20% faster, skin a touch softer."],
          ["fast","Fast",rs.fast[f],"H3 at a smaller size, for checking the cast and the cut."]]
-      : [["max","Max",rs.max[f],"LTX-2.5's full dev model at 1080p: cleaner faces and motion, about 4× Quality's time. For the final render."],
+      : [["ultra","Ultra",rs.ultra[f],"Max with LTX's own dev guidance (STG), 40 steps and a third more pixels: the singer stays in frame, with finer skin and hair. About 6× Max's time; for a final render on a big GPU."],
+         ["max","Max",rs.max[f],"LTX-2.5's full dev model at 1080p: cleaner faces and motion, about 4× Quality's time. For the final render."],
          ["quality","Quality",rs.quality[f],"LTX-2.5 at 1080p, 25 fps clips lip-synced to your vocal."],
          ["fast","Fast",rs.fast[f],"LTX-2.5 at a smaller size, for checking the cast and the cut."]];
     $("#tiers").innerHTML = t.map(x => { const e = estimate(Object.assign({}, b, {preset:x[0]})); return `<button type="button" class="tier" data-q="${x[0]}" aria-pressed="${b.preset===x[0]}"><span class="t"><span><b>${x[1]}</b><span class="mono muted" style="font-size:12px;margin-left:8px">${x[2]}</span></span><span class="eta">≈ ${mins(e)}</span></span><small>${x[3]}</small></button>`; }).join("");
@@ -929,7 +931,7 @@ async function viewBrief(){
     if (use === "full" && r.vram_gb && r.vram_gb < r.full_min_gb) t += " The full models want 48 GB or more, so this may be slow or run out of memory.";
     const miss = [...((r.missing || {})[use] || []), ...(b.engine === "h3" ? [...((r.missing_h3 || {})[use] || []),
         ...(b.preset === "pika" ? ((r.missing_pika || {})[use] || []) : [])]
-      : b.preset === "max" ? ((r.missing_max || {})[use] || []) : [])];
+      : b.preset === "max" || b.preset === "ultra" ? ((r.missing_max || {})[use] || []) : [])];
     if (miss.length) t += ` Missing ${miss.length === 1 ? "one file" : miss.length + " files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`;
     const packs = r.missing_packs || [];
     if (packs.length) t += ` ${packs.join(", ")} didn't load in ComfyUI (look for IMPORT FAILED in its console), so nothing can render.`;
@@ -950,7 +952,7 @@ async function viewBrief(){
       .filter(([k]) => String(b[k]) !== String(DEFAULT_BRIEF[k])).map(([k, n]) => `${n}: ${lab(k)}`);
     if (+b.seed !== DEFAULT_BRIEF.seed) ch.push(`Seed ${b.seed}`);
     if ((b.models || "auto") !== "auto") ch.push(`Models: ${b.models === "full" ? "Full" : "24 GB"}`);
-    if (b.refine) ch.push(b.engine === "h3" || b.preset === "fast" ? "Refine details: on (LTX-2.5 Quality or Max only)" : "Refine details: on");
+    if (b.refine) ch.push(b.engine === "h3" || b.preset === "fast" ? "Refine details: on (LTX-2.5 Quality, Max or Ultra only)" : "Refine details: on");
     $("#advnote").textContent = ch.length ? "Changed: " + ch.join(" · ") : "";
   };
   for (const k of ["cuts_low","cuts_medium","cuts_high","crowd","cast_order","looks","framing","broll_style","qc"]) { const el = $("#"+k); el.value = String(b[k]); el.onchange = () => { b[k] = k === "qc" ? +el.value : el.value; saveBrief(); advNote(); }; }

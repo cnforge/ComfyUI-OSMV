@@ -153,7 +153,7 @@ def not_ready(requested: str | None = "auto", artist: bool = False, engine: str 
             packs = packs + ["ComfyUI's MiniMax H3 nodes (update ComfyUI)"]
         if preset == "pika":
             files += missing_files(name, keys=PIKA_KEYS)
-    elif preset == "max":
+    elif preset in ("max", "ultra"):
         files += missing_files(name, keys=MAX_KEYS)
     why = []
     if files:
@@ -227,6 +227,12 @@ D25_S1 = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
 D25_S2 = "0.909375, 0.725, 0.421875, 0.0"
 # Max (LTX-2.5 dev): stage-1 steps and CFG, and the distilled LoRA's strength on the upscale stage
 DEV_STEPS, DEV_CFG, DEV_LORA = 20, 4.0, 0.6
+# Ultra: the upscale stage in 8 steps (from the same 0.909 start), and stage 1's guidance as in
+# LTX-2's dev workflows: per modality CFG, STG (block 29 perturbed) and cross-modal guidance
+D25_S2_8 = "0.909375, 0.85, 0.78, 0.725, 0.6, 0.421875, 0.25, 0.1, 0.0"
+STG_VIDEO = dict(cfg=3.0, stg=1.0, rescale=0.7, modality_scale=3.0)
+STG_AUDIO = dict(cfg=7.0, stg=1.0, rescale=0.7, modality_scale=3.0)
+STG_BLOCKS = "29"
 
 
 class Graph:
@@ -454,9 +460,17 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
                         audio_vae=m["avae"]))
     # stage 1
     av = g.add("LTXVConcatAVLatent", video_latent=lat_ref, audio_latent=a_ref)
-    guider = g.add("CFGGuider", model=m["model"], positive=p_ref, negative=n_ref, cfg=DEV_CFG if dev else 1.0)
+    if dev and pr.get("stg") and _has_node("MultimodalGuider"):
+        gp = None
+        for mod, kw in (("VIDEO", STG_VIDEO), ("AUDIO", STG_AUDIO)):
+            gp = g.add("GuiderParameters", modality=mod, perturb_attn=True, skip_step=0, cross_attn=True,
+                       **kw, **({"parameters": O(gp)} if gp else {}))
+        guider = g.add("MultimodalGuider", model=m["model"], positive=p_ref, negative=n_ref, parameters=O(gp),
+                       skip_blocks=STG_BLOCKS)
+    else:
+        guider = g.add("CFGGuider", model=m["model"], positive=p_ref, negative=n_ref, cfg=DEV_CFG if dev else 1.0)
     if dev:  # LTX's dev recipe: its own scheduler, real CFG (so the negative prompt counts), res_2s
-        sig = g.add("LTXVScheduler", steps=DEV_STEPS, max_shift=2.05, base_shift=0.95, stretch=True,
+        sig = g.add("LTXVScheduler", steps=int(pr.get("steps", DEV_STEPS)), max_shift=2.05, base_shift=0.95, stretch=True,
                     terminal=0.1, latent=O(av))
         smp = g.add("KSamplerSelect", sampler_name="res_2s")
     elif pr["engine"] == "ltx23_r8":
@@ -473,7 +487,7 @@ def ltx_render(*, preset, fmt, key_path, prompt, negative, frames, seed, prefix,
     vlat, cpos, cneg = O(crop, 2), O(crop, 0), O(crop, 1)
     # the upscale stages: LTX-2.3 runs the quality schedule's last (stages - 1) of them
     plan = ([("dpmpp_sde", R8_S2), ("dpmpp_2m_sde", R8_S3)][-(pr["stages"] - 1):] if pr["engine"] == "ltx23_r8"
-            else [("res_2s" if dev else "euler_ancestral", D25_S2)])
+            else [("res_2s" if dev else "euler_ancestral", D25_S2_8 if pr.get("up_steps") == 8 else D25_S2)])
     smodel = m["model"]
     if dev:  # the upscale stage: dev with the distilled LoRA, at cfg 1
         smodel = O(g.add("LoraLoaderModelOnly", model=smodel, lora_name=M["ltx25_distill_lora"],

@@ -26,13 +26,14 @@ H3_NATIVE = {"16:9": (1344, 768), "9:16": (768, 1344), "1:1": (768, 768)}
 for _k, _f in FORMATS.items():
     _f["fast_voice"] = _f["fast"]  # older runs' singing-at-fast preset
     _f["max"] = _f["quality"]  # Max: Quality's size on LTX-2.5's dev model
+    _f["ultra"] = tuple(v * 4 // 3 for v in _f["quality"])  # Ultra: a third bigger (stage 1 at 768 short side)
     _f["h3"], _f["h3_fast"] = _H3[_k]
     _f["h3_pika"] = _f["h3"]  # Pika: Quality's size, every clip on Pika-H3-Flex
 # what Quality rendered at before 1080p: runs planned then (no "render_wh" in their plan) are
 # cut and re-shot at these sizes
-LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "max": (1280, 768), "h3": (1344, 768)},
-                "9:16": {"quality": (768, 1280), "max": (768, 1280), "h3": (768, 1344)},
-                "1:1": {"quality": (1024, 1024), "max": (1024, 1024), "h3": (768, 768)}}
+LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "max": (1280, 768), "ultra": (1280, 768), "h3": (1344, 768)},
+                "9:16": {"quality": (768, 1280), "max": (768, 1280), "ultra": (768, 1280), "h3": (768, 1344)},
+                "1:1": {"quality": (1024, 1024), "max": (1024, 1024), "ultra": (1024, 1024), "h3": (768, 768)}}
 HIRES_MIN_GB = 40  # 1080p Quality needs this much GPU memory; smaller cards render at LEGACY_SIZES
 FORMAT_NAMES = list(FORMATS)  # 16:9 first: the default
 
@@ -45,6 +46,11 @@ PRESETS = {
     # Max: stage 1 on LTX-2.5's full dev model (20 steps at cfg 4), the upscale stage on dev with
     # the distilled LoRA (LTX's own dev recipe). Cleaner faces and motion, about 4x Quality's time.
     "max": {"stages": 2, "fps": 25, "engine": "ltx25_dev", "sync_delay": 0.05},
+    # Ultra: Max with LTX-2's own dev guidance (CFG + STG + cross-modal, graphs.MultimodalGuider),
+    # 40 steps, 8 upscale steps, and a third bigger (1536x2560 at 9:16). On 4 test shots the singer
+    # stayed in frame where Max drifted off her, with finer skin and hair; about 6x Max's time.
+    "ultra": {"stages": 2, "fps": 25, "engine": "ltx25_dev", "sync_delay": 0.05, "stg": True, "steps": 40,
+              "up_steps": 8},
     # MiniMax H3 (fv/h3.py): one pass of the 8-step reference model at 24 fps, the clip's vocal
     # copied 1:1 as its soundtrack. Its lip offset isn't known yet: SyncNet measures every take.
     "h3": {"stages": 1, "fps": 24, "engine": "h3", "sync_delay": 0.0},
@@ -57,16 +63,16 @@ PRESETS = {
 }
 LEGACY_SYNC = {"quality": 0.16, "fast_voice": 0.16}  # LTX-2.3's lips led by 0.22-0.26 s
 ENGINES = {"ltx25": "LTX-2.5", "h3": "MiniMax H3"}
-PRESET_NAMES = ["quality", "fast", "max", "pika"]  # what users pick; with the engine they make the render preset
+PRESET_NAMES = ["quality", "fast", "max", "ultra", "pika"]  # what users pick; with the engine they make the render preset
 
 
 def effective_preset(mode: str, preset: str, engine: str = "ltx25") -> str:
-    """The render preset for a speed (max / quality / fast / pika) on an engine (ltx25 / h3). Motion
-    runs (pose-guided dance clips) stay on LTX-2.5. H3 has no Max: its full model looked no better.
+    """The render preset for a speed (ultra / max / quality / fast / pika) on an engine (ltx25 / h3). Motion
+    runs (pose-guided dance clips) stay on LTX-2.5. H3 has no Max or Ultra: its full model looked no better.
     Pika is H3's only (on LTX-2.5 it's Quality)."""
     if engine == "h3" and mode == "voice":
         return {"fast": "h3_fast", "pika": "h3_pika"}.get(preset, "h3")
-    return preset if preset in ("quality", "fast", "max") else "quality"
+    return preset if preset in ("quality", "fast", "max", "ultra") else "quality"
 
 
 def engine_of(preset: str) -> str:

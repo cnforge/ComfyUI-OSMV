@@ -60,7 +60,7 @@ sidebar holds New video, Your videos, the video you're on and the GPU and queue.
    Pick a length, a World (four examples, or write your own), an optional
    [Direction](#writing-a-direction) (how the video changes from the opening to the last chorus)
    and the output: format, engine
-   (LTX-2.5 or MiniMax H3), quality (Max, Quality or Fast on LTX-2.5; Quality, Pika or Fast on
+   (LTX-2.5 or MiniMax H3), quality (Ultra, Max, Quality or Fast on LTX-2.5; Quality, Pika or Fast on
    H3), frame rate (24, 25, 30 or 50 fps) and size (720p to 4K, scaled up from the render).
    Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
    close-ups only, crowd, cast order, seed), the take check's retries, the
@@ -232,10 +232,10 @@ line per part of the song, the part, a colon, then the note:
 | Length and start | seconds (0 = the whole song); a start time, or auto | 30 s from the strongest stretch |
 | Format | 16:9 (1920×1080), 9:16 (1080×1920), 1:1 (1080×1080) | 16:9 |
 | Engine | ltx-2.5 (LTX-2.5 distilled, lip sync from the vocal), minimax-h3 (MiniMax H3 reference mode: the portrait, the vocal copied 1:1, the lyrics from Whisper; 24 fps, at least 4.5 s a clip; slower) | ltx-2.5 |
-| Quality | max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
+| Quality | ultra (LTX-2.5 only: Max with STG guidance, 40 steps and 1536×2560 at 9:16, about 6× Max's time), max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
-| Refine details | off, on (LTX-2.5 at Quality or Max: a Refine-Details IC-LoRA pass over every clip in the cut, see [Refine details](#refine-details)) | off |
+| Refine details | off, on (LTX-2.5 at Quality, Max or Ultra: a Refine-Details IC-LoRA pass over every clip in the cut, see [Refine details](#refine-details)) | off |
 | Direction | a note per part of the song (opening, verses, pre-choruses, choruses, bridge, final chorus, outro, or a time range), see [Writing a Direction](#writing-a-direction) | none |
 | Cast order | as written, mixed | as written |
 | Crowd behind singers | auto, on, off | auto |
@@ -266,7 +266,15 @@ distilled LoRA at 0.6, LTX's own dev recipe. Faces and motion come out cleaner, 
 time of Quality (a 4.5 s clip: about 3 minutes instead of 45 seconds on an RTX PRO 6000). It
 needs `ltx-2.5-22b-dev-transformer` (bf16 in the full set, int8 in the 24 GB set) and
 `ltx-2.5-22b-distilled-lora-450-bf16` from [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5).
-H3 has no Max: its unpruned model, at twice the time, looked no different.
+Ultra is Max with three more things: stage 1 is guided the way LTX-2's own dev workflows do it
+(CFG, STG and cross-modal guidance for picture and sound, through the MultimodalGuider of
+[ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo)), it runs 40 steps, and the
+upscale stage runs 8 steps instead of 3. Everything is a third bigger: 2560×1536 for 16:9,
+1536×2560 for 9:16. On four test shots, Max sometimes drifted off the singer to the people around
+them; Ultra kept the singer in frame every time, with finer skin, hair and jewellery. More steps alone,
+or STG alone, didn't do that (STG alone came out softer). It takes about 6× Max's time and needs
+the same files as Max; it's meant for a GPU with lots of memory.
+H3 has no Max or Ultra: its unpruned model, at twice the time, looked no different.
 
 MiniMax H3 needs ComfyUI's MiniMax H3 nodes (a recent ComfyUI), its reference model, the Qwen3-VL
 32B H3 text encoder and the H3 video and audio VAEs (`h3_*` in `fv/models.json`); its lyrics come
@@ -295,6 +303,7 @@ Time for one 4.5 s clip on an RTX PRO 6000 (full set):
 |---|---|
 | LTX-2.5 Quality | about 45 s |
 | LTX-2.5 Max | about 3 min |
+| LTX-2.5 Ultra | about 17 min |
 | MiniMax H3 Quality | about 2 min 40 s |
 | MiniMax H3 Pika | about 2 min 15 s |
 
@@ -456,14 +465,14 @@ MiniMax H3 (the second engine) adds:
 | H3 ref2va (pruned), for Pika | `minimax_h3_ref2va_pruned_int8_convrot.safetensors`, 21.0 GB | `minimax_h3_ref2va_pruned_bf16.safetensors`, 40.2 GB | [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | Pika-H3-Flex ref2va LoRA | `pika_h3_flex_ref2va_comfy_bf16.safetensors`, 2.0 GB | the same | [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) (`comfy/loras`) |
 
-The Max tier on LTX-2.5 adds `ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors`
+The Max and Ultra tiers on LTX-2.5 add `ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors`
 (21.5 GB; `-bf16`, 42.0 GB, in the full set) and `ltx-2.5-22b-distilled-lora-450-bf16.safetensors`
 (8.9 GB), both from [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5).
 
 ### Refine details
 
 Refine details (Advanced, or `refine_details` on the Director) is an optional last pass for LTX-2.5
-at Quality or Max. Once the take checks have picked the final clips, each clip in the cut is
+at Quality, Max or Ultra. Once the take checks have picked the final clips, each clip in the cut is
 re-rendered with Lightricks' [Refine-Details IC-LoRA](https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Refine-Details)
 (`ltx-2.5-22b-ic-lora-refine-details-1.0.safetensors`, 1.3 GB, LTX-2.x Community License, gated:
 accept its terms on Hugging Face first). The clip is the guide, frame for frame, so the framing,
@@ -484,7 +493,7 @@ A default run (voice mode, `crowd` pack) uses:
 | DWPose and YOLOX-L (TorchScript) | Pose guides for looks | Apache-2.0 | Downloaded by [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux) |
 | Hybrid Demucs (`HDEMUCS_HIGH_MUSDB_PLUS`) | Vocal and drum stems | Code MIT; no separate weights licence is published | Downloaded by torchaudio on first use |
 
-With MiniMax H3, or the Max tier:
+With MiniMax H3, or the Max and Ultra tiers:
 
 | Model | Used for | Licence | Download |
 |---|---|---|---|
@@ -492,7 +501,7 @@ With MiniMax H3, or the Max tier:
 | MiniMax H3 ref2va (pruned) and the Pika-H3-Flex ref2va LoRA | B-roll cutaways on H3; every clip at the Pika tier | MiniMax H3 Community License (Pika asks for credit when used in products) | [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex), [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3) |
 | H3 latent upscaler (3D, fp32) | H3 Quality and Pika at 1080p | Apache-2.0 | [LBH-123-AI/Minimax_h3_latent_Upscaler](https://huggingface.co/LBH-123-AI/Minimax_h3_latent_Upscaler) |
 | OpenAI Whisper large-v3-turbo | The sung words in H3's prompts | MIT | Downloaded into `ComfyUI/models/whisper` on first use |
-| LTX-2.5 22B dev and the distilled LoRA 450 | The Max tier | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
+| LTX-2.5 22B dev and the distilled LoRA 450 | The Max and Ultra tiers | LTX-2.x Community License | [Lightricks/LTX-2.5](https://huggingface.co/Lightricks/LTX-2.5) |
 
 The optional checks (Install, step 4):
 

@@ -160,7 +160,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     order loads 4 times and never re-makes a look because its singer was re-rolled.
     direction: notes per part of the song (fv/direction.py), added to each shot's prompts.
     refine: after the last take check, every clip in the cut is re-rendered with LTX-2.5's
-    Refine-Details IC-LoRA (_refine_jobs) before the edit; LTX-2.5 runs at Quality or Max only.
+    Refine-Details IC-LoRA (_refine_jobs) before the edit; LTX-2.5 runs at Quality, Max or Ultra only.
     look_groups (staged, experimental, off by default): each drop group's looks are one LTX clip
     that switches person on the beat (the lead's pose guide, each look's keyframe pinned at its
     cut) instead of one clip per look; the edit reads each look from it. It is much faster when
