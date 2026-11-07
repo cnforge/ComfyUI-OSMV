@@ -868,7 +868,8 @@ class FVFilm:
                              "h3_upscale": (["auto", "relayvsr"], {"default": "auto"}),
                              "sound": ("BOOLEAN", {"default": True, "tooltip": "Without a song: keep the sound each shot was made with"}),
                              "resolution": (["720", "1080", "1440", "2160"], {"default": "1080"}),
-                             "run_name": ("STRING", {"default": ""})}}
+                             "run_name": ("STRING", {"default": ""}),
+                             "shots": (["cuts", "one shot"], {"default": "cuts", "tooltip": "one shot: a single continuous take, no edit (at most 15 s on H3, 20 s on LTX)"})}}
 
     @classmethod
     def IS_CHANGED(cls, **kw):
@@ -881,12 +882,13 @@ class FVFilm:
     CATEGORY = CATEGORY
 
     def run(self, script, kind, seconds, format, preset, seed, queue_renders, style="", song="", song_start=-1.0,
-            look="none", h3_upscale="auto", sound=True, resolution="1080", run_name=""):
+            look="none", h3_upscale="auto", sound=True, resolution="1080", run_name="", shots="cuts"):
         _reload()
         song_path = _resolve(os.path.join(folder_paths.get_input_directory(), song)) if song else ""
         film = fv_film.plan(script=script, seconds=seconds, fmt=format, preset=preset, seed=seed,
                             out_root=folder_paths.get_output_directory(), kind=kind, style=style, song_path=song_path,
-                            song_start=song_start, look=look, run_name=run_name, h3_upscale=h3_upscale, sound=sound)
+                            song_start=song_start, look=look, run_name=run_name, h3_upscale=h3_upscale, sound=sound,
+                            one_shot=shots == "one shot")
         film["resolution"] = int(resolution or 1080)
         if queue_renders:
             ids = [director.queue_prompt(j["graph"]) for j in film["jobs"]]

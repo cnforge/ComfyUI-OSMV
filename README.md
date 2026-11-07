@@ -144,6 +144,11 @@ that nobody speaks. Without music the film runs as long as its lines need, and t
 every take (Whisper) and ends each shot just after its last scripted word, so a line is never cut
 off and the talk a model makes up to fill a long clip is left out.
 
+**One shot, no cuts** (under Shots) makes the whole piece one continuous take: Gemma writes a
+single camera move through the scene with every line in it, and the cut keeps the whole take, with no
+edit. One take is at most 15 s on MiniMax H3 and 20 s on LTX-2.5, which is about 30 to 45 spoken
+words. When the script's lines need longer, the film's page says so.
+
 The film's page shows the cut, every shot with its description, the bible and the script. Change
 the grade and **Re-cut** (nothing re-renders), or **Re-shoot** a shot: it renders a new take and
 cuts again. A 15-second ad on LTX-2.5 Fast takes under 2 minutes on an RTX PRO 6000. Films are in

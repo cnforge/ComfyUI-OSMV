@@ -1439,7 +1439,7 @@ def _film(run: str) -> dict:
             "style": f.get("style", ""), "seconds": f.get("seconds"), "format": f.get("format"), "preset": f.get("preset"),
             "look": f.get("look"), "look_grade": f.get("look_grade", "none"), "cast": f.get("cast", []),
             "song": os.path.basename(f.get("song") or ""), "song_start": f.get("song_start"), "tempo": f.get("tempo"),
-            "h3_vsr": f.get("h3_vsr", False), "seed": f.get("seed"), "created": f.get("created"),
+            "h3_vsr": f.get("h3_vsr", False), "one_shot": f.get("one_shot", False), "note": f.get("note", ""), "seed": f.get("seed"), "created": f.get("created"),
             "video": _view(fin) + f"&t={int(os.path.getmtime(fin))}" if os.path.isfile(fin) else "",
             "state": "cutting" if cut_r else "rendering" if busy else ("done" if os.path.isfile(fin) else "stopped"),
             "queued": len(pending), "cut_queued": cut_q, "shots": shots,
@@ -1594,6 +1594,7 @@ async def _api(request: web.Request, route: str) -> web.Response:
                    "look": body.get("look") if body.get("look") in _fv("finish").LOOKS else "none",
                    "h3_upscale": "relayvsr" if body.get("h3_upscale") == "relayvsr" else "auto",
                    "sound": bool(body.get("sound", True)), "resolution": str(int(body.get("resolution") or 1080)),
+                   "shots": "one shot" if body.get("shots") == "one" else "cuts",
                    "run_name": (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] + "-" + _dt.datetime.now().strftime("%Y%m%d-%H%M")) if name else ""}
             pid = await _blocking(_queue_graph, {"1": {"class_type": "FVFilm", "inputs": inp}})
             return web.json_response({"prompt_id": pid})
