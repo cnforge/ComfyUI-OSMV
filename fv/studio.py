@@ -288,7 +288,7 @@ def _estimate(b: dict) -> dict:
     total = sum(x["s"] for x in parts)
     return {"total_s": int(total), "parts": parts, "shots": len(p["shots"]), "need": need,
             "world_cached": bool(bible) and have >= need, "window": [round(p["song_t0"], 2), round(p["song_t1"], 2)],
-            "render_min": round(6 + {"ultra": 9.0, "max": 10.0, "quality": 2.5}.get(b.get("preset", "quality"), 1.0) * win)}
+            "render_min": round(6 + {"ultra": 7.8, "max": 2.2, "quality": 0.6, "fast": 0.25}.get(b.get("preset", "quality"), 1.0) * win)}
 
 
 def _project(d: str) -> str:
@@ -638,7 +638,7 @@ def _kept_qc(r: dict) -> dict | None:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = {"ultra": 9.0, "max": 10.0, "quality": 2.5, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
+    per = {"ultra": 7.8, "max": 2.2, "quality": 0.6, "fast": 0.25, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
     if p.get("refine"):
         per += REFINE_PER_S
     return 6 + per * dur

@@ -631,6 +631,8 @@ function demoRun(r){
   });
   const nNotes = cur < ids.indexOf("check") ? 0 : Math.ceil(r.notes.length * Math.min(1, (f * 100 - 15) / 75));
   DM.left[run] = shots.filter(s => s.state !== "clip").length;
+  const next = shots.find(s => s.kind !== "broll" && s.state !== "clip");
+  r.now = next ? {what: next.state === "still" ? "clip" : "still", shots: [next.n]} : {};
   return Object.assign(r, {stage: ids[cur], video: "", stages, shots, pct: Math.min(99, Math.round(f * 100)), elapsed_min: f * total,
     left_min: Math.max(0, (1 - f) * total), latest, notes: r.notes.slice(0, nNotes), stalled: !!DM.stop[run], queued_jobs: DM.stop[run] ? 0 : 1});
 }
@@ -676,7 +678,7 @@ const gpuName = g => String(g || "").replace(/^NVIDIA\s+/i, "").replace(/\s+(Bla
 const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; const m = Math.round(s / 60); return mins(m); };
 // minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
 function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
-  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({ultra: 9, max: 10, quality: 2.5}[b.preset] || 1);
+  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({ultra: 7.8, max: 2.2, quality: 0.6, fast: 0.25}[b.preset] || 1);
   const refine = b.refine && b.engine !== "h3" && b.preset !== "fast" ? REFINE_PER_S : 0;
   return 6 + (per + refine) * sec; }
 // minutes of Refine-Details pass per second of video: 81 s for a 65-frame 1152x1920 clip, and a cut renders
@@ -938,7 +940,7 @@ async function viewBrief(){
       ? [["quality","Quality",rs.quality[f],"MiniMax H3 at 1080p, 24 fps: rendered at its native size, then lifted with its latent upscaler. Your vocal copied 1:1, the lyrics in every prompt. The slowest."],
          ["pika","Pika",rs.quality[f],"Every clip on the Pika-H3-Flex LoRA: 6 steps instead of 8, at Quality's size: about 20% faster, skin a touch softer."],
          ["fast","Fast",rs.fast[f],"H3 at a smaller size, for checking the cast and the cut."]]
-      : [["ultra","Ultra",rs.ultra[f],"Max with LTX's own dev guidance (STG), 40 steps and a third more pixels: the singer stays in frame, with finer skin and hair. About 6× Max's time; for a final render on a big GPU."],
+      : [["ultra","Ultra",rs.ultra[f],"Max with LTX's own dev guidance (STG), 40 steps and a third more pixels: the singer stays in frame, with finer skin and hair. About 3½× Max's time; for a final render on a big GPU."],
          ["max","Max",rs.max[f],"LTX-2.5's full dev model at 1080p: cleaner faces and motion, about 4× Quality's time. For the final render."],
          ["quality","Quality",rs.quality[f],"LTX-2.5 at 1080p, 25 fps clips lip-synced to your vocal."],
          ["fast","Fast",rs.fast[f],"LTX-2.5 at a smaller size, for checking the cast and the cut."]];

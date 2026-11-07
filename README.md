@@ -47,9 +47,11 @@ All three drive the same nodes, and every run shows up in the Studio under Your 
 
 With ComfyUI running, open http://127.0.0.1:8188/oneshot-mv/ or click **cnforge Studio** in
 ComfyUI's top bar. ComfyUI serves the page itself, so there is nothing else to install. The
-sidebar holds New video, Your videos, the video you're on and the GPU and queue.
+sidebar holds New video, Your videos, the video you're on, the GPU and queue, and **Restart
+ComfyUI** (it asks first, and warns when jobs are queued: a restart stops the running job and drops
+the waiting ones; the page reloads once ComfyUI is back).
 
-![The Studio: the Brief and a video's workspace](media/studio_screens.jpg)
+![The Studio's four steps on one video: the Brief, the Plan, the render and the result](media/studio_screens.jpg)
 
 1. **The Brief.** Name the project, then drop in a song. The waveform shows the low, medium and
    high energy sections and the stretch the video will use: drag the box to move it, click or
@@ -57,7 +59,7 @@ sidebar holds New video, Your videos, the video you're on and the GPU and queue.
    to 8): every singer becomes one of them, taking turns shot by shot (a shot's quick looks stay
    that person), dressed and placed by the World (needs Qwen-Image 2.1 and FLUX.2 klein,
    see [the other models](#models-and-licences); use a photo of someone who agreed to it).
-   Pick a length, a World (four examples, or write your own), an optional
+   Pick a length (15, 30 or 60 s, the whole song, or any custom length from 5 s), a World (four examples, or write your own), an optional
    [Direction](#writing-a-direction) (how the video changes from the opening to the last chorus)
    and the output: format, engine
    (LTX-2.5 or MiniMax H3), quality (Ultra, Max, Quality or Fast on LTX-2.5; Quality, Pika or Fast on
@@ -84,7 +86,8 @@ sidebar holds New video, Your videos, the video you're on and the GPU and queue.
    - **Plan**: nothing has rendered. Shuffle the cast (plan again with the next seed) or Make
      the video.
    - **Rendering**: the stage, the progress and the time left; the shots fill in on the timeline
-     as stills and clips arrive. You can close the tab and come back, or stop the video.
+     as stills and clips arrive, and the shot being made right now glows with a tag saying what
+     it is (Still, Clip, New take or Refining). You can close the tab and come back, or stop the video.
    - **Done**: Download, and Export XML for Premiere Pro or DaVinci Resolve (every clip with its
      in and out points). From here you can:
      - Re-shoot shots. Pick one and choose New take (same person and still) or New person (a new
@@ -232,7 +235,7 @@ line per part of the song, the part, a colon, then the note:
 | Length and start | seconds (0 = the whole song); a start time, or auto | 30 s from the strongest stretch |
 | Format | 16:9 (1920×1080), 9:16 (1080×1920), 1:1 (1080×1080) | 16:9 |
 | Engine | ltx-2.5 (LTX-2.5 distilled, lip sync from the vocal), minimax-h3 (MiniMax H3 reference mode: the portrait, the vocal copied 1:1, the lyrics from Whisper; 24 fps, at least 4.5 s a clip; slower) | ltx-2.5 |
-| Quality | ultra (LTX-2.5 only: Max with STG guidance, 40 steps and 1536×2560 at 9:16, about 6× Max's time), max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
+| Quality | ultra (LTX-2.5 only: Max with STG guidance, 40 steps and 1536×2560 at 9:16, about 3½× Max's time for a whole video), max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
 | Refine details | off, on (LTX-2.5 at Quality, Max or Ultra: a Refine-Details IC-LoRA pass over every clip in the cut, see [Refine details](#refine-details)) | off |
@@ -272,7 +275,7 @@ Ultra is Max with three more things: stage 1 is guided the way LTX-2's own dev w
 upscale stage runs 8 steps instead of 3. Everything is a third bigger: 2560×1536 for 16:9,
 1536×2560 for 9:16. On four test shots, Max sometimes drifted off the singer to the people around
 them; Ultra kept the singer in frame every time, with finer skin, hair and jewellery. More steps alone,
-or STG alone, didn't do that (STG alone came out softer). It takes about 6× Max's time and needs
+or STG alone, didn't do that (STG alone came out softer). Each clip takes about 6× Max's time (a whole video about 3½×, as stills and checks take as long on every tier) and needs
 the same files as Max; it's meant for a GPU with lots of memory. Ultra's lips run further ahead of
 the voice than Max's (about 0.12 s), so its cut shifts them back by that much wherever SyncNet
 can't measure a take with confidence.
@@ -294,10 +297,10 @@ The Pika tier (H3 only) renders every clip on Pika-H3-Flex, singers too: 6 steps
 Quality's size. A 4.5 s singer clip took 133 s instead of 162 s on an RTX PRO 6000, with the same
 lip sync (SyncNet 5.5 vs 5.7) and slightly softer skin. It needs the two Pika files above.
 
-<img src="media/studio_quality.png" width="300" align="right" alt="The Brief's Output card on MiniMax H3: Quality, Pika and Fast, each with its render size and expected time">
+The Brief shows each tier's render size and a rough time for the chosen length (measured on an
+RTX PRO 6000), and lists any model files the choice needs that aren't installed.
 
-The Brief shows each tier's render size and a rough time for the chosen length, and lists any
-model files the choice needs that aren't installed.
+<img src="media/studio_quality.png" width="600" alt="The Brief's Output card on LTX-2.5: Ultra, Max, Quality and Fast, each with its render size and expected time for a 30 s video">
 
 Time for one 4.5 s clip on an RTX PRO 6000 (full set):
 
@@ -308,8 +311,6 @@ Time for one 4.5 s clip on an RTX PRO 6000 (full set):
 | LTX-2.5 Ultra | about 17 min |
 | MiniMax H3 Quality | about 2 min 40 s |
 | MiniMax H3 Pika | about 2 min 15 s |
-
-<br clear="right">
 
 "To the music" cuts on the beat to a new face in the same spot: about every half bar on subtle,
 about every beat on intense.
