@@ -305,6 +305,16 @@ RelayVSR Conditioning and VSR Decode nodes) and
 `relayvsr_x2_lightx2v_int8_convrot.safetensors` in `models/diffusion_models` and
 `relayvsr_flash_vae_x2_fp32.safetensors` in `models/vae`. Without them H3 falls back to SelfLift.
 
+**Stills: Krea 2 or MiniMax H3 Image** (Output, under the engine) picks the image model. Krea 2
+makes the singer portraits and b-roll stills, and Qwen-Image 2.1 edits your character photos.
+[MiniMax H3 Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image) does all three. Its stills
+are made at about 4 MP (2720×1536 for 16:9) in 6 steps, then scaled to the clip size, and photo
+edits are scaled to 4 MP first, because the model draws poorly below that. The look keyframes stay
+on Klein, which keeps the pose by construction. H3 Image uses H3's text encoder plus
+[Comfy-Org/MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image)'s
+`minimax_h3_image_pruned_int8_convrot.safetensors` in `models/diffusion_models` and
+`minimax_h3_image_vae_fp16.safetensors` in `models/vae`. Without them a run uses Krea 2.
+
 Max renders LTX-2.5 clips with its full dev model instead of the 8-step distilled one: stage 1
 runs 20 steps at cfg 4 (so the negative prompt counts), and the upscale stage runs dev with the
 distilled LoRA at 0.6, LTX's own dev recipe. Faces and motion come out cleaner, at about 4× the

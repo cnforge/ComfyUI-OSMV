@@ -523,7 +523,7 @@ const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const PARTS = {intro:"Opening", verse:"Verse", build:"Pre-chorus", chorus:"Chorus", break:"Bridge", final:"Final chorus", outro:"Outro"};
 const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
-  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", refine:false, h3_upscale:"auto"};
+  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", refine:false, h3_upscale:"auto", image_model:"krea"};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -862,6 +862,8 @@ async function viewBrief(){
       <div class="grid3" role="group" aria-label="Format" id="fmts"></div>
       <div class="orow outrow"><span>Engine</span><div class="seg mini" role="group" aria-label="Video engine" id="engs"></div></div>
       <div class="stack" role="group" aria-label="Quality" id="tiers" style="margin-top:10px;gap:6px"></div>
+      <div class="orow outrow"><span>Stills</span><div class="seg mini" role="group" aria-label="Image model" id="imgs"></div></div>
+      <p class="tiny" id="imgnote" style="margin:4px 0 0"></p>
       <div class="orow outrow"><span>Frame rate</span><div class="seg mini" role="group" aria-label="Frame rate" id="fpss"></div></div>
       <div class="orow"><span>Size</span><div class="seg mini" role="group" aria-label="Size" id="ress"></div></div>
       <p class="tiny" style="margin:8px 0 0" id="etanote"></p>
@@ -947,6 +949,12 @@ async function viewBrief(){
     if (eng === "ltx25" && b.preset === "pika") b.preset = "quality";  // Pika is an H3 LoRA
     $("#engs").innerHTML = ENGINES.map(([k, n]) => `<button type="button" class="opt" data-v="${k}" aria-pressed="${eng === k}">${n}</button>`).join("");
     $("#engs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.engine = el.dataset.v; saveBrief(); drawTiers(); if (S.models) drawModels(); });
+    const im = b.image_model === "h3_image" ? "h3_image" : "krea";
+    $("#imgs").innerHTML = [["krea","Krea 2"],["h3_image","MiniMax H3 Image"]].map(([k, n]) => `<button type="button" class="opt" data-v="${k}" aria-pressed="${im === k}">${n}</button>`).join("");
+    $("#imgs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.image_model = el.dataset.v; saveBrief(); drawTiers(); if (S.models) drawModels(); });
+    $("#imgnote").textContent = im === "h3_image"
+      ? "The portraits, the b-roll stills and the edits of your character photos are made by MiniMax H3 Image at about 4 MP: more detail and better text, slower than Krea 2."
+      : "The portraits and b-roll stills are made by Krea 2, and character photos are edited with Qwen-Image 2.1.";
     const f = rs.quality[b.format] ? b.format : "16:9";
     const t = eng === "h3"
       ? [["quality","Quality",rs.quality[f],"MiniMax H3 at 1080p, 24 fps: rendered at its native size, then lifted with its latent upscaler. Your vocal copied 1:1, the lyrics in every prompt. The slowest."],
@@ -985,7 +993,8 @@ async function viewBrief(){
     if (use === "full" && r.vram_gb && r.vram_gb < r.full_min_gb) t += " The full models want 48 GB or more, so this may be slow or run out of memory.";
     const miss = [...((r.missing || {})[use] || []), ...(b.engine === "h3" ? [...((r.missing_h3 || {})[use] || []),
         ...(b.preset === "pika" ? ((r.missing_pika || {})[use] || []) : [])]
-      : b.preset === "max" || b.preset === "ultra" ? ((r.missing_max || {})[use] || []) : [])];
+      : b.preset === "max" || b.preset === "ultra" ? ((r.missing_max || {})[use] || []) : []),
+      ...(b.image_model === "h3_image" ? ((r.missing_h3img || {})[use] || []) : [])];
     if (miss.length) t += ` Missing ${miss.length === 1 ? "one file" : miss.length + " files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`;
     const packs = r.missing_packs || [];
     if (packs.length) t += ` ${packs.join(", ")} didn't load in ComfyUI (look for IMPORT FAILED in its console), so nothing can render.`;

@@ -306,7 +306,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
                                        pera)
             if stills:
                 keys.append(graphs.krea2_portrait(prompt=img_still, seed=seed, prefix=f"{rel}/k{rid:03d}R",
-                                                  size1=s1, size2=s2).nodes)
+                                                  size1=s1, size2=s2, image_model=p.get("image_model", "krea")).nodes)
                 still_job = len(keys) - 1
             # the drum stem under it (no vocal, so nobody starts singing)
             seek = round(t_start + p["song_t0"] - p.get("stems_t0", 0.0), 4)
@@ -329,7 +329,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             motion = period_background(directions.clip(motion, cnote), pera)
             if stills:
                 keys.append(graphs.krea2_portrait(prompt=img_still, seed=seed, prefix=f"{rel}/k{rid:03d}R",
-                                                  size1=s1, size2=s2).nodes)
+                                                  size1=s1, size2=s2, image_model=p.get("image_model", "krea")).nodes)
                 still_job = len(keys) - 1
             # the drum stem drives the movement (no vocal, so nobody starts singing)
             seek = round(t_start + p["song_t0"] - p.get("stems_t0", 0.0), 4)
@@ -344,7 +344,7 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
             if stills:
                 keys.append(graphs.krea2_portrait(prompt=finish_prompt(img + STILL, people=False, camera=camera), seed=seed,
                                                   prefix=f"{rel}/k{rid:03d}R",
-                                                  size1=s1, size2=s2).nodes)
+                                                  size1=s1, size2=s2, image_model=p.get("image_model", "krea")).nodes)
             clips.append(graphs.ltx_render(vsr=bool(p.get("h3_vsr")), preset=preset, fmt=fmt, size=formats.render_size(fmt, preset, p), key_path=key if stills else None,
                                            prompt=_for_engine(preset, period_background(img + STILL + MOTION, pera),
                                                               frames, rfps, False, empty=True),

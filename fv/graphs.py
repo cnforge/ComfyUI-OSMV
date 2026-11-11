@@ -6,6 +6,7 @@ Director can queue a whole run up front (later jobs read files earlier jobs will
 from __future__ import annotations
 
 import json
+import math
 import os
 
 from . import formats
@@ -72,6 +73,8 @@ RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", 
 H3_KEYS = ("h3_unet", "h3_te", "h3_vae", "h3_audio_vae")  # the singer clips on MiniMax H3
 PIKA_KEYS = ("h3_pika_unet", "h3_pika_lora")  # H3 b-roll on Pika-H3-Flex (optional: else on h3_unet); the Pika preset
 MAX_KEYS = ("ltx25_dev_unet", "ltx25_distill_lora")  # the Max preset (LTX-2.5 dev)
+H3IMG_KEYS = ("h3img_unet", "h3_te", "h3img_vae")  # MiniMax H3 Image (the image model choice): H3's text encoder
+IMAGE_MODELS = ("krea", "h3_image")
 ARTIST_KEYS = ("qwen21_unet", "qwen21_te", "qwen21_vae",   # a character photo's portraits
                "klein_unet", "klein_te", "klein_vae")      # and its looks
 
@@ -176,6 +179,7 @@ def models_report() -> dict:
             "missing_h3": {n: missing_files(n, idx, H3_KEYS) for n in MODEL_SETS},
             "missing_max": {n: missing_files(n, idx, MAX_KEYS) for n in MODEL_SETS},
             "missing_pika": {n: missing_files(n, idx, PIKA_KEYS) for n in MODEL_SETS},
+            "missing_h3img": {n: missing_files(n, idx, H3IMG_KEYS) for n in MODEL_SETS},
             "missing_checks": missing_checks()}
 
 
@@ -267,12 +271,15 @@ def _save_video(g, images, fps, prefix, audio=None):
 
 
 # ------------------------------------------------------------------ Krea 2 W5
-def krea2_portrait(*, prompt, seed, prefix, size1, size2, denoise=0.25, turbo_only=False):
+def krea2_portrait(*, prompt, seed, prefix, size1, size2, denoise=0.25, turbo_only=False, image_model="krea"):
     """Krea 2 W5 hybrid (Turbo composes, RAW + Turbo LoRA redetails). turbo_only=True uses the
     Turbo model for both passes: one model to load instead of two (the fast preset).
     denoise: how hard the RAW pass redetails the upscaled image; 0.40 looks too gritty, so 0.25
     keeps Turbo's cleaner composition and adds less texture. A set that names the same file for
-    Turbo and RAW also runs Turbo for both passes (the Turbo LoRA is only for the RAW model)."""
+    Turbo and RAW also runs Turbo for both passes (the Turbo LoRA is only for the RAW model).
+    image_model "h3_image": MiniMax H3 Image makes the still instead (h3img_still)."""
+    if image_model == "h3_image":
+        return h3img_still(prompt=prompt, seed=seed, prefix=prefix, size2=size2)
     g = Graph()
     turbo = g.add("UNETLoader", unet_name=M["krea_turbo"], weight_dtype="default")
     if turbo_only or M["krea_raw"] == M["krea_turbo"]:
@@ -299,11 +306,63 @@ def krea2_portrait(*, prompt, seed, prefix, size1, size2, denoise=0.25, turbo_on
     return g
 
 
-def artist_portrait(*, artist_path, prompt, seed, prefix, size2, resolution=1024):
-    """One-artist mode: the artist photo re-staged by Qwen-Image 2.1 (identity kept)."""
+def artist_portrait(*, artist_path, prompt, seed, prefix, size2, resolution=1024, image_model="krea"):
+    """One-artist mode: the artist photo re-staged by Qwen-Image 2.1 (identity kept), or by
+    MiniMax H3 Image's edit with image_model "h3_image"."""
     g = Graph()
     ref = g.add("FVLoadImagePath", path=artist_path)
-    out = _qwen21(g, O(ref), prompt, seed=seed, resolution=resolution)
+    if image_model == "h3_image":
+        out = _h3img(g, f"Edit <Picture 1>, keeping this exact person: {prompt}", seed, images=[O(ref)])
+    else:
+        out = _qwen21(g, O(ref), prompt, seed=seed, resolution=resolution)
+    out = O(g.add("ImageScale", image=out, upscale_method="lanczos", width=size2[0], height=size2[1], crop="center"))
+    g.add("SaveImage", images=out, filename_prefix=prefix)
+    return g
+
+
+# ------------------------------------------------------------------ MiniMax H3 Image
+H3IMG_MP = 4.2  # megapixels: H3 Image works from about 4 MP up (16 MP is its best, and far slower)
+H3IMG_STEPS = 6
+
+
+def h3img_ready() -> bool:
+    return not missing_files(M.get("_set", "24gb"), keys=H3IMG_KEYS)
+
+
+def h3img_size(size) -> tuple[int, int]:
+    """About H3IMG_MP megapixels in the shape of `size`, in multiples of 32."""
+    w, h = size
+    k = math.sqrt(H3IMG_MP * 1e6 / (w * h))
+    return max(32, round(w * k / 32) * 32), max(32, round(h * k / 32) * 32)
+
+
+def _h3img(g, prompt, seed, size=None, images=(), steps=H3IMG_STEPS):
+    """MiniMax H3 Image (ComfyUI's template: 6 steps, cfg 1, euler/simple). Text to image at `size`,
+    or with images an edit of image_1 (<Picture 1>; the others are <Picture 2>...) at its size, which
+    is first brought to about H3IMG_MP megapixels: the model draws poorly below 4 MP."""
+    unet = g.add("UNETLoader", unet_name=M["h3img_unet"], weight_dtype="default")
+    clip = g.add("CLIPLoader", clip_name=M["h3_te"], type="minimax", device="default")
+    vae = g.add("VAELoader", vae_name=M["h3img_vae"])
+    kw = {}
+    for i, im in enumerate(images):
+        if i == 0:
+            im = O(g.add("ImageScaleToTotalPixels", image=im, upscale_method="lanczos", megapixels=H3IMG_MP,
+                         resolution_steps=32))
+            dims = g.add("GetImageSize", image=im)
+            size = (O(dims, 0), O(dims, 1))
+        kw[f"images.image_{i + 1}"] = im
+    w, h = size or (2048, 2048)
+    cond = g.add("MiniMaxH3ImageConditioning", clip=O(clip), vae=O(vae), prompt=prompt, width=w, height=h, **kw)
+    neg = g.add("ConditioningZeroOut", conditioning=O(cond, 0))
+    ks = g.add("KSampler", model=O(unet), seed=seed, steps=steps, cfg=1.0, sampler_name="euler", scheduler="simple",
+               positive=O(cond, 0), negative=O(neg), latent_image=O(cond, 1), denoise=1.0)
+    return O(g.add("VAEDecode", samples=O(ks), vae=O(vae)))
+
+
+def h3img_still(*, prompt, seed, prefix, size2):
+    """A still from MiniMax H3 Image: made at about 4 MP in size2's shape, then scaled to size2."""
+    g = Graph()
+    out = _h3img(g, prompt, seed, size=h3img_size(size2))
     out = O(g.add("ImageScale", image=out, upscale_method="lanczos", width=size2[0], height=size2[1], crop="center"))
     g.add("SaveImage", images=out, filename_prefix=prefix)
     return g

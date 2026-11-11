@@ -248,6 +248,9 @@ class FVDirector:
             "h3_upscale": (["auto", "relayvsr"], {"default": "auto",
                            "tooltip": "MiniMax H3 above its native size: auto lifts the clip with SelfLift (or scales it "
                                       "up); relayvsr renders at the native size and upscales every clip 2x with RelayVSR."}),
+            "image_model": (["krea", "h3_image"], {"default": "krea",
+                            "tooltip": "The stills (singer portraits, b-roll stills) and the artist photo edits: Krea 2 "
+                                       "(and Qwen-Image 2.1 for the photo edits), or MiniMax H3 Image for both."}),
             "dance_video_path": ("STRING", {"default": "", "tooltip": "Motion mode: path to the dance clip"}),
             "run_name": ("STRING", {"default": ""}),
             "twin_editor": (["klein", "qwen"], {"default": "klein"}),
@@ -338,7 +341,7 @@ class FVDirector:
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
             cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5",
-            direction="", refine_details=False, h3_upscale="auto"):
+            direction="", refine_details=False, h3_upscale="auto", image_model="krea"):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -359,7 +362,8 @@ class FVDirector:
                               crowd=crowd or "auto", models=models or "auto",
                               fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080),
                               engine="h3" if engine == "minimax-h3" else "ltx25", direction=direction or "",
-                              refine=bool(refine_details), h3_upscale=h3_upscale or "auto")
+                              refine=bool(refine_details), h3_upscale=h3_upscale or "auto",
+                              image_model=image_model or "krea")
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}

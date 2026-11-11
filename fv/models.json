@@ -48,6 +48,8 @@
  "h3_audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
  "h3_pika_unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
  "h3_pika_lora": "pika_h3_flex_ref2va_comfy_bf16.safetensors",
+ "h3img_unet": "minimax_h3_image_pruned_int8_convrot.safetensors",
+ "h3img_vae": "minimax_h3_image_vae_fp16.safetensors",
  "klein_unet": "flux-2-klein-9b-fp8.safetensors",
  "klein_te": "qwen_3_8b_fp8mixed.safetensors",
  "klein_vae": "full_encoder_small_decoder.safetensors",

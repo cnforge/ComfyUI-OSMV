@@ -150,7 +150,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
            look_groups: bool = False, cuts: dict | None = None, audio_fx: str = "",
            cast_order: str = "as written", crowd: str = "auto", log=print, fps: float = 0.0, resolution: int = 1080,
            lip_repair: bool = False, models: str = "auto", engine: str = "ltx25", direction: str = "",
-           refine: bool = False, h3_upscale: str = "auto") -> dict:  # lip_repair: accepted and ignored, so older callers
+           refine: bool = False, h3_upscale: str = "auto", image_model: str = "krea") -> dict:  # lip_repair: accepted and ignored, so older callers
     # (an old nodes.py still loaded in a ComfyUI that has not restarted) still work
     """staged (voice runs queued here, with QC): the 4-load order. Krea makes every portrait and
     the b-roll candidate stills; LTX makes every singer clip and the b-roll clips, and QC
@@ -268,6 +268,12 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
             p["h3_vsr"] = True
         else:
             log("[OneShotMV] RelayVSR skipped: needs ComfyUI's RelayVSR nodes and its x2 model and VAE")
+    if image_model == "h3_image":  # the stills (portraits, b-roll) and the artist photo edits on MiniMax H3 Image
+        if graphs.h3img_ready():
+            p["image_model"] = "h3_image"
+        else:
+            log("[OneShotMV] MiniMax H3 Image isn't installed: the stills use Krea 2 ("
+                + ", ".join(graphs.missing_files(graphs.M.get("_set", "24gb"), keys=graphs.H3IMG_KEYS)) + ")")
     rsize = formats.render_size(fmt, preset)
     if 0 < graphs.vram_gb() < formats.HIRES_MIN_GB:  # 1080p Quality is for 48 GB+ cards
         rsize = formats.LEGACY_SIZES[fmt].get(preset, rsize)
@@ -363,11 +369,13 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
             name = f"p{c['id']:03d}"
             if c.get("artist_edit"):
                 jobs.append((name, graphs.artist_portrait(artist_path=photo_of(c["id"]), prompt=c["portrait"],
-                                                          seed=c["seed"], prefix=f"{rel}/{name}", size2=s2).nodes))
+                                                          seed=c["seed"], prefix=f"{rel}/{name}", size2=s2,
+                                                          image_model=p.get("image_model", "krea")).nodes))
             else:
                 jobs.append((name, graphs.krea2_portrait(prompt=c["portrait"], seed=c["seed"],
                                                            prefix=f"{rel}/{name}", size1=s1, size2=s2,
-                                                           turbo_only=(label == "fast")).nodes))
+                                                           turbo_only=(label == "fast"),
+                                                           image_model=p.get("image_model", "krea")).nodes))
             port[c["id"]] = os.path.join(run_dir, f"{name}_00001_.png")
         free_idx = len(jobs)
         jobs.append(("free_after_portraits", graphs.free_memory("after Krea 2 portraits").nodes))

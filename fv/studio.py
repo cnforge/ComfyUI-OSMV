@@ -415,6 +415,8 @@ def _director_graph(b: dict) -> dict:
         d["refine_details"] = True
     if b.get("h3_upscale") == "relayvsr" and _director_has("h3_upscale"):  # H3 clips: RelayVSR 2x
         d["h3_upscale"] = "relayvsr"
+    if b.get("image_model") == "h3_image" and _director_has("image_model"):  # the stills on MiniMax H3 Image
+        d["image_model"] = "h3_image"
     if (b.get("direction") or "").strip() and _director_has("direction"):  # notes per part of the song
         d["direction"] = b["direction"].strip()
     if _director_has("engine"):  # the singer clips' video model (an older node renders LTX only)
@@ -926,7 +928,8 @@ def _edit_brief(d: str) -> dict | None:
          "seed": ins.get("seed"), "looks": ins.get("twins"), "framing": ins.get("framing"), "broll": ins.get("broll_share"),
          "broll_style": ins.get("broll_style"), "qc": ins.get("qc_retries"), "fx": ins.get("audio_fx"),
          "cast_order": ins.get("cast_order"), "crowd": ins.get("crowd"), "models": ins.get("models"),
-         "refine": bool(ins.get("refine_details")), "h3_upscale": ins.get("h3_upscale") or "auto", "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
+         "refine": bool(ins.get("refine_details")), "h3_upscale": ins.get("h3_upscale") or "auto",
+         "image_model": ins.get("image_model") or "krea", "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
          "characters": [rel(x) for x in (ins.get("artist_image_path") or "").split("|") if x]}
     for k in ("cuts_low", "cuts_medium", "cuts_high"):
         b[k] = ins.get(k)
