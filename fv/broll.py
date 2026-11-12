@@ -8,7 +8,10 @@ shot whose SyncNet confidence stayed low), then in instrumental gaps (a lead wit
 vocal under it). Each world cutaway is written as an image prompt by the same local language
 model as themes (fv/theme.py), from one of the World's places and lights; Krea 2 makes the still
 and LTX moves it. broll_style 'mix' (default) puts the world cutaways over weak lip sync and the
-dance filler in instrumental gaps; 'world' or 'dance' uses one kind everywhere."""
+dance filler in instrumental gaps; 'world' or 'dance' uses one kind everywhere.
+broll_prompts (the Brief's B-roll box): the user's own cutaways, one per line, used in order (and
+again from the top when there are more slots than lines), as written: no language model, no
+"ordinary view" rules, brands kept."""
 from __future__ import annotations
 
 import json
@@ -58,6 +61,22 @@ NEGATIVE = ("text, lettering, subtitles, watermark, logo, singing, talking, micr
             "picture in picture, frame within a frame, shrinking picture, zoom out to black, black border")
 # an empty cutaway has nobody in it (otherwise a stranger can turn up in an artist's video)
 NEGATIVE_EMPTY = NEGATIVE + ", person, people, face, crowd, figure, silhouette"
+# the user's own cutaways (broll_prompts): their words, the realism finish, nobody singing; the
+# labels of products they name are allowed, made-up text isn't
+CUSTOM_STILL = " Nobody is singing or talking. No captions, subtitles or made-up text; only the real printed labels of the products named."
+CUSTOM_MOTION = " The camera moves smoothly and the motion described plays out naturally; nobody sings or talks."
+NEGATIVE_CUSTOM = ("subtitles, captions, watermark, garbled text, singing, talking, microphone, blurry, low quality, "
+                   "distorted, deformed")
+
+
+def custom_lines(p: dict) -> list[str]:
+    """The Brief's B-roll lines (broll_prompts), blank lines and list bullets dropped."""
+    out = []
+    for x in p.get("broll_prompts") or []:
+        x = " ".join(str(x).split()).lstrip("-*• ").strip()
+        if x:
+            out.append(x)
+    return out
 
 
 def slots(p: dict, share: float) -> int:
@@ -69,7 +88,8 @@ def slots(p: dict, share: float) -> int:
     n = max(1, int(round(len(p["shots"]) * share)))
     by_id = {r["id"]: r for r in p.get("renders", [])}
     ok = [s for s in p["shots"] if _open(s, by_id) and s.get("index", 0) > 0 and s["t1"] - s["t0"] >= 1.0]
-    return max(1, min(n, len(ok) // 3)) if ok else 0
+    # "about 1 in 2" may fill every other open shot (never two in a row); otherwise a third at most
+    return max(1, min(n, len(ok) // (2 if share >= 0.5 else 3))) if ok else 0
 
 
 def _open(s: dict, by_id: dict) -> bool:
@@ -241,13 +261,14 @@ def kind_for(why: str, style: str) -> str:
     return "dance" if why == "instrumental gap" else "moment"  # mix
 
 
-def _for_engine(preset: str, text: str, frames: int, fps: float, drums: bool, empty: bool = False) -> str:
+def _for_engine(preset: str, text: str, frames: int, fps: float, drums: bool, empty: bool = False,
+                custom: bool = False) -> str:
     """A cutaway's prompt in its engine's structure (fv/prompts.py): nobody sings in it; empty: a
-    place with nobody in it."""
+    place with nobody in it; custom: the user's own cutaway, which plays out as written."""
     from . import prompts
     if formats.engine_of(preset) == "h3":
         return prompts.h3(text, seconds=frames / float(fps), broll=True, empty=empty, sung=False,
-                          audio="drums" if drums else "",
+                          audio="drums" if drums else "", custom=custom,
                           motion=formats.PRESETS.get(preset, {}).get("dynamic", False))
     return prompts.ltx25(text, sung=False)
 
@@ -279,9 +300,10 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
     rfps = p.get("render_fps", formats.PRESETS[preset]["fps"])
     s1, s2 = formats.portrait_size(fmt)
     keys, clips, made = [], [], []
+    own = custom_lines(p)
     for k, (s, why) in enumerate(picks):
         rid = len(p["renders"])
-        kind = kind_for(why, style)
+        kind = "custom" if own else kind_for(why, style)
         t_start = max(-p["song_t0"], s["t0"] - 0.2)
         frames = formats.ltx_frames(s["t1"] - t_start + 0.15, rfps)
         key = os.path.join(run_dir, f"k{rid:03d}R_00001_.png")
@@ -295,7 +317,23 @@ def plan(p: dict, run_dir: str, pack: dict, log=print, candidates: bool = False)
         if kind in ("dance", "moment") and p.get("artist_path"):
             kind = "words"  # the artist's own dance would need an identity edit (another model swap)
         check, still_job = None, None
-        if kind == "moment":
+        if kind == "custom":
+            img = own[k % len(own)]
+            line = img
+            if stills:
+                keys.append(graphs.krea2_portrait(prompt=finish_prompt(img + CUSTOM_STILL, people=False, camera=camera),
+                                                  seed=seed, prefix=f"{rel}/k{rid:03d}R", size1=s1, size2=s2,
+                                                  image_model=p.get("image_model", "krea")).nodes)
+            seek = round(t_start + p["song_t0"] - p.get("stems_t0", 0.0), 4)
+            clips.append(graphs.ltx_render(vsr=bool(p.get("h3_vsr")), preset=preset, fmt=fmt, size=formats.render_size(fmt, preset, p),
+                                           key_path=key if stills else None,
+                                           prompt=_for_engine(preset, img + CUSTOM_MOTION, frames, rfps, os.path.exists(drums),
+                                                              custom=True),
+                                           negative=NEGATIVE_CUSTOM, frames=frames, seed=seed,
+                                           prefix=f"{rel}/r{rid:03d}R", broll=True,
+                                           audio_path=drums if os.path.exists(drums) else None,
+                                           audio_seek=seek).nodes)
+        elif kind == "moment":
             d = _dancer(p, pack, k)
             check = d.pop("check", None)
             d["light"] = d["light"][:1].upper() + d["light"][1:]

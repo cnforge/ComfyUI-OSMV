@@ -417,6 +417,8 @@ def _director_graph(b: dict) -> dict:
         d["h3_upscale"] = "relayvsr"
     if b.get("image_model") == "h3_image" and _director_has("image_model"):  # the stills on MiniMax H3 Image
         d["image_model"] = "h3_image"
+    if (b.get("broll_prompts") or "").strip() and _director_has("broll_prompts"):  # the user's own cutaways
+        d["broll_prompts"] = b["broll_prompts"].strip()
     if (b.get("direction") or "").strip() and _director_has("direction"):  # notes per part of the song
         d["direction"] = b["direction"].strip()
     if _director_has("engine"):  # the singer clips' video model (an older node renders LTX only)
@@ -924,6 +926,7 @@ def _edit_brief(d: str) -> dict | None:
     rel = lambda x: x[len(root):] if x.startswith(root) else x
     b = {"name": sj.get("project", ""), "song": (g.get("1") or {}).get("inputs", {}).get("audio", ""),
          "theme": ins.get("theme", ""), "world": "custom", "direction": ins.get("direction", ""),
+         "broll_prompts": ins.get("broll_prompts", ""),
          "format": ins.get("format"), "preset": ins.get("preset"), "seconds": ins.get("seconds"), "start": ins.get("start"),
          "seed": ins.get("seed"), "looks": ins.get("twins"), "framing": ins.get("framing"), "broll": ins.get("broll_share"),
          "broll_style": ins.get("broll_style"), "qc": ins.get("qc_retries"), "fx": ins.get("audio_fx"),

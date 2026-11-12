@@ -29,7 +29,7 @@ Everything runs locally in ComfyUI on open-weights models.
 7. A take check re-shoots missing, frozen or blown-out takes, dead mouths, takes that drift to
    another person or place, bad framing, and weak lip sync (scored with SyncNet).
 8. A few shots become b-roll: a World character in a candid moment, not singing (instrumental
-   stretches first).
+   stretches first), or your own cutaways from the B-roll box (see [B-roll](#b-roll)).
 9. It cuts everything on the beat, adds audio-reactive FX driven by the drums, then a color grade,
    grain at 1080p and a vignette. You get an MP4, an EDL and a Final Cut Pro XML.
 
@@ -261,6 +261,18 @@ line per part of the song, the part, a colon, then the note:
 - A planned video's Shot tab shows which part every shot is in and the note it got, so check it
   there before rendering.
 
+### B-roll
+
+Under the Direction, the B-roll box takes your own cutaways, one per line: a product shot, a
+detail, a place ("Cola pouring over ice in slow motion, bubbles rising"). Every cutaway slot takes
+the next line, from the top again when there are more slots than lines. Each line is used as you
+wrote it for the still and the clip, with only the realism finish added: no language model
+rewrites it, and brands you name are kept (made-up text and subtitles are still kept out). Leave it
+empty and the cutaways come from the World (Cutaway style). Advanced, Cutaways sets how many: up to
+about 1 in 2 shots; writing lines turns cutaways on at 1 in 8 when it is set to none. Cutaways only
+go where nobody sings over a drop (quiet and build parts, instrumental drops), never on the
+opening shot and never two in a row. On the node, the input is `broll_prompts`.
+
 ## Settings
 
 | Setting | Choices | Default |
@@ -275,7 +287,8 @@ line per part of the song, the part, a colon, then the note:
 | Direction | a note per part of the song (opening, verses, pre-choruses, choruses, bridge, final chorus, outro, or a time range), see [Writing a Direction](#writing-a-direction) | none |
 | Cast order | as written, mixed | as written |
 | Crowd behind singers | auto, on, off | auto |
-| B-roll share | 0 to 0.5 of the shots | 0.125 |
+| B-roll share | 0 to 0.5 of the shots (Studio: none, 1 in 8, 1 in 4, 1 in 2) | 0.125 |
+| B-roll lines | your own cutaways, one per line ([B-roll](#b-roll)) | empty: from the World |
 | Take-check rounds | 0 to 3 | 2 |
 | Seed | any number | 1 |
 | Models | auto, 24gb (fp8), full (bf16, 48 GB+ GPUs) | auto |

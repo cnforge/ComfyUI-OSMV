@@ -245,6 +245,11 @@ class FVDirector:
                                "tooltip": "LTX-2.5 at Quality, Max or Ultra: after the take checks, every clip in the cut is "
                                           "re-rendered with Lightricks' Refine-Details IC-LoRA (tiled, 8 steps) for "
                                           "sharper texture, edges and grain. Adds time to every clip."}),
+            "broll_prompts": ("STRING", {"default": "", "multiline": True,
+                              "tooltip": "Your own b-roll cutaways, one per line (a product shot, a detail, a place): used "
+                                         "in order for every cutaway slot (again from the top when there are more slots "
+                                         "than lines), as written; brands you name are kept. Empty: the cutaways come "
+                                         "from the World (broll_style). broll_share sets how many."}),
             "h3_upscale": (["auto", "relayvsr"], {"default": "auto",
                            "tooltip": "MiniMax H3 above its native size: auto lifts the clip with SelfLift (or scales it "
                                       "up); relayvsr renders at the native size and upscales every clip 2x with RelayVSR."}),
@@ -341,7 +346,7 @@ class FVDirector:
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
             cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5",
-            direction="", refine_details=False, h3_upscale="auto", image_model="krea"):
+            direction="", refine_details=False, h3_upscale="auto", image_model="krea", broll_prompts=""):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -363,7 +368,7 @@ class FVDirector:
                               fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080),
                               engine="h3" if engine == "minimax-h3" else "ltx25", direction=direction or "",
                               refine=bool(refine_details), h3_upscale=h3_upscale or "auto",
-                              image_model=image_model or "krea")
+                              image_model=image_model or "krea", broll_prompts=broll_prompts or "")
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}

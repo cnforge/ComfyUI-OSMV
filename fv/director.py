@@ -150,7 +150,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
            look_groups: bool = False, cuts: dict | None = None, audio_fx: str = "",
            cast_order: str = "as written", crowd: str = "auto", log=print, fps: float = 0.0, resolution: int = 1080,
            lip_repair: bool = False, models: str = "auto", engine: str = "ltx25", direction: str = "",
-           refine: bool = False, h3_upscale: str = "auto", image_model: str = "krea") -> dict:  # lip_repair: accepted and ignored, so older callers
+           refine: bool = False, h3_upscale: str = "auto", image_model: str = "krea", broll_prompts: str = "") -> dict:  # lip_repair: accepted and ignored, so older callers
     # (an old nodes.py still loaded in a ComfyUI that has not restarted) still work
     """staged (voice runs queued here, with QC): the 4-load order. Krea makes every portrait and
     the b-roll candidate stills; LTX makes every singer clip and the b-roll clips, and QC
@@ -167,6 +167,8 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     it works (65 s instead of 156 s in one test), but in another only 10 of 36 looks cut cleanly
     (the clip left the first look within its first frames, morphed instead of cutting, or showed
     three people), so looks a group doesn't deliver get their own clip after all (_fallback_looks)."""
+    if (broll_prompts or "").strip() and broll_share <= 0:  # B-roll lines written: cutaways are wanted
+        broll_share = 0.125
     # the model set ("24gb" fp8 files, or "full" bf16 files on 48 GB cards): every job this run
     # queues, and every later pass, uses the same one (p["models"])
     model_set = graphs.use_models(models)
@@ -298,6 +300,9 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     if mode == "voice" and broll_share > 0:
         p["broll_share"] = float(broll_share)
         p["broll_style"] = broll_style if broll_style in ("mix", "world", "dance") else "mix"
+        lines = [x.strip() for x in (broll_prompts or "").splitlines() if x.strip()]
+        if lines:  # the Brief's B-roll box: the user's own cutaways, in order
+            p["broll_prompts"] = lines
 
     rsize = formats.render_size(fmt, preset, p)
     jobs: list[tuple[str, dict]] = []

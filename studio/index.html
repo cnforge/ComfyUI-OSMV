@@ -523,7 +523,7 @@ const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const PARTS = {intro:"Opening", verse:"Verse", build:"Pre-chorus", chorus:"Chorus", break:"Bridge", final:"Final chorus", outro:"Outro"};
 const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
-  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", refine:false, h3_upscale:"auto", image_model:"krea"};
+  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", broll_prompts:"", refine:false, h3_upscale:"auto", image_model:"krea"};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -847,6 +847,9 @@ async function viewBrief(){
       <label class="flabel" for="direction">How the video changes over the song: a line per part, the picture first</label>
       <textarea id="direction" rows="5" placeholder="Opening: quiet close-ups in the recording studio, soft daylight.&#10;Verses: walking the city at dusk, playful.&#10;Pre-choruses: the rehearsal hall, bigger camera moves.&#10;Choruses: the red stage, fast camera, spectacle.&#10;Bridge: the rooftop at night, stripped back.&#10;Final chorus and outro: the stage at full scale."></textarea>
       <p class="note">Name a part (opening, verses, pre-choruses, choruses, bridge, final chorus, outro) or a time like 1:12-1:30, then a colon. A line with no part goes on every shot. Singer portraits get about 90 words of their part's note and cutaways its first sentence, so lead with the place, light and wardrobe.</p>
+      <label class="flabel" for="brollp" style="margin-top:14px">B-roll: your own cutaways, one per line</label>
+      <textarea id="brollp" rows="4" placeholder="Extreme macro of condensation running down a cold glass bottle.&#10;Cola pouring over ice in slow motion, bubbles rising.&#10;Rows of red cans in a lit refrigerator, the camera gliding along the shelf."></textarea>
+      <p class="note" id="brollnote">Each cutaway slot takes the next line, from the top again when the lines run out, written as you put it; brands you name are kept. Empty: cutaways come from the World. How many: Advanced, Cutaways.</p>
     </section>
 
     <section class="card" aria-labelledby="charh">
@@ -874,7 +877,7 @@ async function viewBrief(){
         <div class="opts">
           <div class="ogroup">Editing: how often it cuts</div>
           ${[["low","Quiet parts"],["medium","Verses"],["high","Choruses and drops"]].map(([k, n]) => `<label class="orow sub"><span><i style="background:${LEVEL_COL[k]}"></i>${n}</span><select id="cuts_${k}">${CUTS.map(([v, t])=>`<option value="${v}">${t}</option>`).join("")}</select></label>`).join("")}
-          <label class="orow"><span>Cutaways</span><select id="broll"><option value="0">none</option><option value="0.125">about 1 in 8 shots</option><option value="0.25">about 1 in 4 shots</option></select></label>
+          <label class="orow"><span>Cutaways</span><select id="broll"><option value="0">none</option><option value="0.125">about 1 in 8 shots</option><option value="0.25">about 1 in 4 shots</option><option value="0.5">about 1 in 2 shots</option></select></label>
           <label class="orow"><span>Cutaway style</span><select id="broll_style"><option value="mix">mix</option><option value="world">the World</option><option value="dance">dancing</option></select></label>
           <div class="ogroup">Cast</div>
           <label class="orow"><span>Looks in a shot</span><select id="looks"><option value="auto">auto</option><option value="loud">loud parts only</option><option value="all">every shot</option><option value="off">off</option></select></label>
@@ -924,6 +927,9 @@ async function viewBrief(){
   const dta = $("#direction");
   dta.value = b.direction || "";
   dta.oninput = () => { b.direction = dta.value; saveBrief(); };
+  const bpa = $("#brollp");
+  bpa.value = b.broll_prompts || "";
+  bpa.oninput = () => { b.broll_prompts = bpa.value; saveBrief(); };
   ta.oninput = () => { b.theme = ta.value; const w = WORLDS.find(x => x.text && x.text === ta.value); b.world = w ? w.id : "custom"; saveBrief(); drawTiles(); };
 
   // format, quality
