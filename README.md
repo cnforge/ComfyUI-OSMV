@@ -65,8 +65,8 @@ the waiting ones; the page reloads once ComfyUI is back).
    Pick a length (15, 30 or 60 s, the whole song, or any custom length from 5 s), a World (four examples, or write your own), an optional
    [Direction](#writing-a-direction) (how the video changes from the opening to the last chorus)
    and the output: format, engine
-   (LTX-2.5 or MiniMax H3), quality (Ultra, Max, Quality or Fast on LTX-2.5; Quality, Pika or Fast on
-   H3), frame rate (24, 25, 30 or 50 fps) and size (720p to 4K, scaled up from the render).
+   (LTX-2.5 or MiniMax H3), quality (Ultra, Max, Quality or Fast on LTX-2.5; Quality, More motion, Singularity,
+   Pika or Fast on H3), frame rate (24, 25, 30 or 50 fps) and size (720p to 4K, scaled up from the render).
    Advanced holds the editing (how often it cuts, cutaways), the cast (looks in a shot,
    close-ups only, crowd, cast order, seed), the take check's retries, the
    [detail refine](#refine-details) and the model versions.
@@ -268,7 +268,7 @@ line per part of the song, the part, a colon, then the note:
 | Length and start | seconds (0 = the whole song); a start time, or auto | 30 s from the strongest stretch |
 | Format | 16:9 (1920×1080), 9:16 (1080×1920), 1:1 (1080×1080) | 16:9 |
 | Engine | ltx-2.5 (LTX-2.5 distilled, lip sync from the vocal), minimax-h3 (MiniMax H3 reference mode: the portrait, the vocal copied 1:1, the lyrics from Whisper; 24 fps, at least 4.5 s a clip; slower) | ltx-2.5 |
-| Quality | ultra (LTX-2.5 only: Max with STG guidance, 40 steps and 1536×2560 at 9:16, about 3½× Max's time for a whole video), max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
+| Quality | ultra (LTX-2.5 only: Max with STG guidance, 40 steps and 1536×2560 at 9:16, about 3½× Max's time for a whole video), max (LTX-2.5 only: Quality's size on the full dev model, about 4× Quality's time), quality (LTX-2.5: clips at 1920×1152 for 16:9, 25 fps; H3: 1920×1088, 24 fps), dynamic (H3 only, "More motion": Quality's size on H3's full reference model at 20 steps, the portrait not pinned as the first frame, prompts that ask for body and camera movement; about 2× Quality's time), singularity (H3 only: More motion on the Singularity ref2va fine-tune, bf16), pika (H3 only: every clip on Pika-H3-Flex at Quality's size, about 20% faster), fast (LTX-2.5: 896×512; H3: 1024×576; for checking the cast and the cut) | quality |
 | Cuts, per energy level | every 2 bars, every bar, to the music (subtle), to the music (intense) | low: every 2 bars; medium: every bar; high: to the music (subtle) |
 | Audio-reactive FX | none, subtle, intense (per energy level in the Studio) | subtle |
 | Refine details | off, on (LTX-2.5 at Quality, Max or Ultra: a Refine-Details IC-LoRA pass over every clip in the cut, see [Refine details](#refine-details)) | off |
@@ -349,6 +349,20 @@ The Pika tier (H3 only) renders every clip on Pika-H3-Flex, singers too: 6 steps
 Quality's size. A 4.5 s singer clip took 133 s instead of 162 s on an RTX PRO 6000, with the same
 lip sync (SyncNet 5.5 vs 5.7) and slightly softer skin. It needs the two Pika files above.
 
+The More motion tier (H3 only) trades speed for livelier clips. It renders on H3's full reference model
+(`h3_full_unet`: the unpruned bf16 `minimax_h3_ref2va_bf16` in the full set, the pruned int8 one in the
+24 GB set) at 20 steps instead of fasth3's 8, keeps the portrait
+as `<Picture 1>` for the face without pinning it as the first frame, and its prompts ask for the
+whole body to move with the rhythm and for one camera move (push in, orbit, handheld, track or
+crane). The vocal is still pinned at frame 0 for lip sync. Its b-roll cutaways render the same way
+(full model, 20 steps, moving prompts) instead of on Pika. From the same portrait and 5 s of audio,
+the average frame-to-frame change was 4.5 against Quality's 1.6, with the face kept; the clip took
+556 s instead of 259 s on an RTX PRO 6000.
+
+The Singularity tier (H3 only) is More motion on `Minimax-h3_Singularity_ref2va_v2_bf16.safetensors`
+(`h3_singularity_unet`), a fine-tune of H3's reference model, in place of H3's own: the same 20 steps,
+portrait handling and moving prompts. Put the file anywhere in ComfyUI's `diffusion_models` folders.
+
 The Brief shows each tier's render size and a rough time for the chosen length (measured on an
 RTX PRO 6000), and lists any model files the choice needs that aren't installed.
 
@@ -363,6 +377,7 @@ Time for one 4.5 s clip on an RTX PRO 6000 (full set):
 | LTX-2.5 Ultra | about 17 min |
 | MiniMax H3 Quality | about 2 min 40 s |
 | MiniMax H3 Pika | about 2 min 15 s |
+| MiniMax H3 More motion | about 5 min 30 s |
 
 "To the music" cuts on the beat to a new face in the same spot: about every half bar on subtle,
 about every beat on intense.

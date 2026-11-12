@@ -47,6 +47,8 @@
  "h3_vae": "minimax_h3_video_vae_int8_convrot.safetensors",
  "h3_audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
  "h3_pika_unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+ "h3_full_unet": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+ "h3_singularity_unet": "Minimax-h3_Singularity_ref2va_v2_bf16.safetensors",
  "h3_pika_lora": "pika_h3_flex_ref2va_comfy_bf16.safetensors",
  "h3img_unet": "minimax_h3_image_pruned_int8_convrot.safetensors",
  "h3img_vae": "minimax_h3_image_vae_fp16.safetensors",

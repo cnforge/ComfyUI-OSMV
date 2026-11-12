@@ -689,7 +689,7 @@ const gpuName = g => String(g || "").replace(/^NVIDIA\s+/i, "").replace(/\s+(Bla
 const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; const m = Math.round(s / 60); return mins(m); };
 // minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
 function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
-  const per = b.engine === "h3" ? ({fast: 2, pika: 4}[b.preset] || 5) : ({ultra: 7.8, max: 2.2, quality: 0.6, fast: 0.25}[b.preset] || 1);
+  const per = b.engine === "h3" ? ({fast: 2, pika: 4, dynamic: 11, singularity: 11}[b.preset] || 5) : ({ultra: 7.8, max: 2.2, quality: 0.6, fast: 0.25}[b.preset] || 1);
   const refine = b.refine && b.engine !== "h3" && b.preset !== "fast" ? REFINE_PER_S : 0;
   return 6 + (per + refine) * sec; }
 // minutes of Refine-Details pass per second of video: 81 s for a 65-frame 1152x1920 clip, and a cut renders
@@ -701,7 +701,7 @@ const projectOf = r => (r && r.project) || (DEMO && r ? ((store.get("briefs", {}
 const fileStem = r => (projectOf(r).replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80)) || r.run;
 // the file stem of a run's take ("r004A") from its /api/view URL, for opening its job in ComfyUI
 // a run's render preset as the Brief names it (fv/formats.py PRESETS)
-const presetName = p => ({h3: "H3 quality", h3_fast: "H3 fast", h3_pika: "H3 Pika", fast_voice: "fast"}[p] || p || "");
+const presetName = p => ({h3: "H3 quality", h3_fast: "H3 fast", h3_pika: "H3 Pika", h3_dynamic: "H3 more motion", h3_singularity: "H3 Singularity", fast_voice: "fast"}[p] || p || "");
 const takeStem = url => (new URLSearchParams(String(url).split("?")[1] || "").get("filename") || "").replace(/_00001_.*$/, "");
 // a song file's name as a title: no folder, extension or "(Official Music Video)"-style tags
 const songTitle = f => String(f || "").split("/").pop().replace(/\.[^.]+$/, "").replace(/\s*[(\[][^)\]]*[)\]]/g, "").replace(/[_]+/g, " ").trim().slice(0, 80) || "Untitled";
@@ -946,7 +946,7 @@ async function viewBrief(){
   const drawTiers = () => {
     const eng = b.engine === "h3" ? "h3" : "ltx25", rs = RSIZE[eng];
     if (eng === "h3" && (b.preset === "max" || b.preset === "ultra")) b.preset = "quality";  // H3 has no Max or Ultra
-    if (eng === "ltx25" && b.preset === "pika") b.preset = "quality";  // Pika is an H3 LoRA
+    if (eng === "ltx25" && ["pika", "dynamic", "singularity"].includes(b.preset)) b.preset = "quality";  // H3 only
     $("#engs").innerHTML = ENGINES.map(([k, n]) => `<button type="button" class="opt" data-v="${k}" aria-pressed="${eng === k}">${n}</button>`).join("");
     $("#engs").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.engine = el.dataset.v; saveBrief(); drawTiers(); if (S.models) drawModels(); });
     const im = b.image_model === "h3_image" ? "h3_image" : "krea";
@@ -958,6 +958,8 @@ async function viewBrief(){
     const f = rs.quality[b.format] ? b.format : "16:9";
     const t = eng === "h3"
       ? [["quality","Quality",rs.quality[f],"MiniMax H3 at 1080p, 24 fps: rendered at its native size, then lifted with its latent upscaler. Your vocal copied 1:1, the lyrics in every prompt. The slowest."],
+         ["dynamic","More motion",rs.quality[f],"H3's full model at 20 steps instead of the fast one's 8. The portrait sets the face but isn't pinned as the first frame, and every shot asks for body and camera movement. Livelier clips, faces can drift a little more; about 2× Quality's time."],
+         ["singularity","Singularity",rs.quality[f],"More motion on the Singularity fine-tune of H3's reference model (bf16) in place of H3's own: the same 20 steps, movement and prompts."],
          ["pika","Pika",rs.quality[f],"Every clip on the Pika-H3-Flex LoRA: 6 steps instead of 8, at Quality's size: about 20% faster, skin a touch softer."],
          ["fast","Fast",rs.fast[f],"H3 at a smaller size, for checking the cast and the cut."]]
       : [["ultra","Ultra",rs.ultra[f],"Max with LTX's own dev guidance (STG), 40 steps and a third more pixels: the singer stays in frame, with finer skin and hair. About 3½× Max's time; for a final render on a big GPU."],
@@ -992,7 +994,9 @@ async function viewBrief(){
     t += cur === "auto" ? `Auto uses the ${name}.` : `Uses the ${name}.`;
     if (use === "full" && r.vram_gb && r.vram_gb < r.full_min_gb) t += " The full models want 48 GB or more, so this may be slow or run out of memory.";
     const miss = [...((r.missing || {})[use] || []), ...(b.engine === "h3" ? [...((r.missing_h3 || {})[use] || []),
-        ...(b.preset === "pika" ? ((r.missing_pika || {})[use] || []) : [])]
+        ...(b.preset === "pika" ? ((r.missing_pika || {})[use] || []) : []),
+        ...(b.preset === "dynamic" ? ((r.missing_dynamic || {})[use] || []) : []),
+        ...(b.preset === "singularity" ? ((r.missing_singularity || {})[use] || []) : [])]
       : b.preset === "max" || b.preset === "ultra" ? ((r.missing_max || {})[use] || []) : []),
       ...(b.image_model === "h3_image" ? ((r.missing_h3img || {})[use] || []) : [])];
     if (miss.length) t += ` Missing ${miss.length === 1 ? "one file" : miss.length + " files"}: ${miss.slice(0, 3).join(", ")}${miss.length > 3 ? ` and ${miss.length - 3} more` : ""}. The README lists the downloads.`;
@@ -1934,7 +1938,7 @@ function wsFinish(body){
 const DEFAULT_FILM = {name: "", kind: "commercial", shots: "cuts", script: "", style: "", seconds: 30, format: "16:9", preset: "quality",
   h3_upscale: "auto", resolution: 1080, look: "none", music: "sound", song: "", seed: 1, mkstyle: "", mkinst: true};
 const FILM_MODELS = [["quality","LTX-2.5 Quality"],["fast","LTX-2.5 Fast"],["max","LTX-2.5 Max"],["ultra","LTX-2.5 Ultra"],
-  ["h3","MiniMax H3"],["h3_fast","MiniMax H3 Fast"],["h3_pika","MiniMax H3 Pika"]];
+  ["h3","MiniMax H3"],["h3_fast","MiniMax H3 Fast"],["h3_pika","MiniMax H3 Pika"],["h3_dynamic","MiniMax H3 More motion"],["h3_singularity","MiniMax H3 Singularity"]];
 const FILM_KINDS = [["commercial","Commercial"],["film","Short film"],["trailer","Trailer"],["documentary","Documentary"]];
 const segHtml = (id, items, cur) => `<div class="seg" id="${id}">${items.map(([v, l]) => `<button type="button" class="opt" data-v="${esc(String(v))}" aria-pressed="${String(cur) === String(v)}">${esc(l)}</button>`).join("")}</div>`;
 async function viewFilmBrief(){

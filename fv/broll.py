@@ -247,7 +247,8 @@ def _for_engine(preset: str, text: str, frames: int, fps: float, drums: bool, em
     from . import prompts
     if formats.engine_of(preset) == "h3":
         return prompts.h3(text, seconds=frames / float(fps), broll=True, empty=empty, sung=False,
-                          audio="drums" if drums else "")
+                          audio="drums" if drums else "",
+                          motion=formats.PRESETS.get(preset, {}).get("dynamic", False))
     return prompts.ltx25(text, sung=False)
 
 

@@ -657,7 +657,7 @@ def _kept_qc(r: dict) -> dict | None:
 
 def _estimate_min(p: dict) -> float:
     dur = float(p.get("duration") or 30)
-    per = {"ultra": 7.8, "max": 2.2, "quality": 0.6, "fast": 0.25, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0}.get(p.get("preset"), 1.0)
+    per = {"ultra": 7.8, "max": 2.2, "quality": 0.6, "fast": 0.25, "h3": 5.0, "h3_fast": 2.0, "h3_pika": 4.0, "h3_dynamic": 11.0, "h3_singularity": 11.0}.get(p.get("preset"), 1.0)
     if p.get("refine"):
         per += REFINE_PER_S
     return 6 + per * dur

@@ -9,5 +9,6 @@
  "h3_unet": "fasth3_omniref_8step_pruned_bf16.safetensors",
  "h3_te": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
  "h3_pika_unet": "minimax_h3_ref2va_pruned_bf16.safetensors",
+ "h3_full_unet": "minimax_h3_ref2va_bf16.safetensors",
  "h3_vae": "minimax_h3_video_vae_fp16.safetensors"
 }

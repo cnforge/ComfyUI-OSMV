@@ -71,6 +71,8 @@ RUN_KEYS = ("krea_turbo", "krea_raw", "krea_turbo_lora", "krea_te", "krea_vae", 
             "ltx25_audio_vae", "ltx25_te", "ltx25_upscaler", "ltx_union_lora",  # what a default voice run loads (looks too)
             "ltx23_ckpt", "ltx23_te")  # LTX-2.3's Gemma 3: the language model of the vision check and the World
 H3_KEYS = ("h3_unet", "h3_te", "h3_vae", "h3_audio_vae")  # the singer clips on MiniMax H3
+DYNAMIC_KEYS = ("h3_full_unet",)  # More motion: H3's whole reference model (ref2va; bf16 unpruned in the full set)
+SINGULARITY_KEYS = ("h3_singularity_unet",)  # Singularity: More motion on the Singularity ref2va fine-tune
 PIKA_KEYS = ("h3_pika_unet", "h3_pika_lora")  # H3 b-roll on Pika-H3-Flex (optional: else on h3_unet); the Pika preset
 MAX_KEYS = ("ltx25_dev_unet", "ltx25_distill_lora")  # the Max preset (LTX-2.5 dev)
 H3IMG_KEYS = ("h3img_unet", "h3_te", "h3img_vae")  # MiniMax H3 Image (the image model choice): H3's text encoder
@@ -156,6 +158,10 @@ def not_ready(requested: str | None = "auto", artist: bool = False, engine: str 
             packs = packs + ["ComfyUI's MiniMax H3 nodes (update ComfyUI)"]
         if preset == "pika":
             files += missing_files(name, keys=PIKA_KEYS)
+        elif preset == "dynamic":
+            files += missing_files(name, keys=DYNAMIC_KEYS)
+        elif preset == "singularity":
+            files += missing_files(name, keys=SINGULARITY_KEYS)
     elif preset in ("max", "ultra"):
         files += missing_files(name, keys=MAX_KEYS)
     why = []
@@ -179,6 +185,8 @@ def models_report() -> dict:
             "missing_h3": {n: missing_files(n, idx, H3_KEYS) for n in MODEL_SETS},
             "missing_max": {n: missing_files(n, idx, MAX_KEYS) for n in MODEL_SETS},
             "missing_pika": {n: missing_files(n, idx, PIKA_KEYS) for n in MODEL_SETS},
+            "missing_dynamic": {n: missing_files(n, idx, DYNAMIC_KEYS) for n in MODEL_SETS},
+            "missing_singularity": {n: missing_files(n, idx, SINGULARITY_KEYS) for n in MODEL_SETS},
             "missing_h3img": {n: missing_files(n, idx, H3IMG_KEYS) for n in MODEL_SETS},
             "missing_checks": missing_checks()}
 
@@ -635,6 +643,9 @@ H3_SHIFT = (12.0, 3.0)  # ModelSamplingMiniMaxH3: video, audio
 # lift comes after 4 of them
 PIKA_SIGMAS = "1.0, 0.972973, 0.923077, 0.8, 0.571429, 0.333333, 0.0"
 PIKA_LIFT_AT = 4
+# More motion: the full reference model's own schedule (as H3 Studio renders it), lifted after 15 of 20
+H3_DYNAMIC_STEPS = 20
+H3_DYNAMIC_LIFT_AT = 15
 
 
 def pika_ready() -> bool:
@@ -642,8 +653,14 @@ def pika_ready() -> bool:
     return not missing_files(M.get("_set", "24gb"), keys=PIKA_KEYS)
 
 
-def _h3(g, pika=False):
-    unet = g.add("UNETLoader", unet_name=M["h3_pika_unet" if pika else "h3_unet"], weight_dtype="default")
+def _dynamic_unet(pr: dict) -> str | None:
+    """The models.json key of a More-motion preset's model (None for the other presets)."""
+    return pr.get("unet", "h3_full_unet") if pr.get("dynamic") else None
+
+
+def _h3(g, pika=False, full=None):
+    """full: a models.json key (More motion's model) in place of fasth3."""
+    unet = g.add("UNETLoader", unet_name=M[full or ("h3_pika_unet" if pika else "h3_unet")], weight_dtype="default")
     model = _ram_backups(g, O(unet))
     if pika:
         model = O(g.add("LoraLoaderModelOnly", model=model, lora_name=M["h3_pika_lora"], strength_model=1.0))
@@ -715,10 +732,12 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
     latent upscaler lifts the clip, and the last steps run at full size (SelfLift); without
     SelfLift the clip renders at the native size and is scaled up.
     broll: a cutaway, rendered on Pika-H3-Flex when it's installed (on B-roll it kept to the
-    keyframe and never letterboxed, in about 80% of fasth3's time; on singers it was softer).
+    keyframe and never letterboxed, in about 80% of fasth3's time; on singers it was softer);
+    on More motion it renders on the full model like the singers.
     The Pika preset renders every clip on it."""
     fps = formats.H3_FPS
-    pika = (broll or formats.PRESETS[preset].get("pika", False)) and pika_ready()
+    dynamic = formats.PRESETS[preset].get("dynamic", False)  # More motion: singers and b-roll on the full model
+    pika = ((broll and not dynamic) or formats.PRESETS[preset].get("pika", False)) and pika_ready()
     w, h = size or formats.render_size(fmt, preset)
     nw, nh = formats.H3_NATIVE[fmt]
     lift = w * h > nw * nh
@@ -726,7 +745,7 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
     ups = h3_upscaler() if lift and not vsr else None
     rw, rh = (w, h) if ups or not lift else (nw, nh)  # the size H3 samples at
     g = Graph()
-    m = _h3(g, pika)
+    m = _h3(g, pika, full=_dynamic_unet(formats.PRESETS[preset]))
     refs = {}
     key = None
     if key_path:
@@ -744,19 +763,22 @@ def h3_render(*, preset, fmt, key_path, prompt, frames, seed, prefix, audio_path
     r2v = g.add("MiniMaxH3ReferenceToVideo", clip=m["clip"], vae=m["vae"], audio_vae=m["avae"], prompt=prompt,
                 width=rw, height=rh, length=int(frames), ref_image_size="match", **refs)
     pos, lat = O(r2v, 0), O(r2v, 1)
-    if key is not None or au is not None:
-        kw = {"image": O(key), "vae": m["vae"]} if key is not None else {}
+    pin = key is not None and not dynamic  # More motion: the keyframe guides the face, not frame 0
+    if pin or au is not None:
+        kw = {"image": O(key), "vae": m["vae"]} if pin else {}
         if au is not None:
             kw.update(audio=au, audio_vae=m["avae"])
         pos = O(g.add("MiniMaxH3AddGuide", positive=pos, latent=lat, frame_idx=0, **kw))
     guider = g.add("BasicGuider", model=m["model"], conditioning=pos)
     sig = (g.add("ManualSigmas", sigmas=PIKA_SIGMAS) if pika else
+           g.add("BasicScheduler", model=m["model"], scheduler="simple", steps=H3_DYNAMIC_STEPS, denoise=1.0) if dynamic else
            g.add("BasicScheduler", model=m["model"], scheduler="beta", steps=H3_STEPS, denoise=1.0))
-    euler = g.add("KSamplerSelect", sampler_name="lcm" if pika and not ups else "euler")
+    euler = g.add("KSamplerSelect", sampler_name="lcm" if pika and not ups else
+                  "res_multistep" if dynamic and not ups else "euler")
     if ups:
         s = g.add("SelfLiftH3Sampler", model=m["model"], positive=pos, negative=pos, vae=m["vae"], latent_image=lat,
                   sampler=O(euler), sigmas=O(sig), seed=seed, cfg=1.0,
-                  transition_step=PIKA_LIFT_AT if pika else H3_LIFT_AT,
+                  transition_step=PIKA_LIFT_AT if pika else H3_DYNAMIC_LIFT_AT if dynamic else H3_LIFT_AT,
                   lowres_scale=round(nh / h, 4), rho=0.0, w_min=0.5, w_max=1.0, upscaler_model=ups,
                   upscaler_unload=True)
     else:
@@ -890,7 +912,7 @@ def keep_ltx(g, preset="quality"):
         return g
     pr = formats.PRESETS.get(preset, formats.PRESETS["quality"])
     if pr["engine"] == "h3":
-        m = _h3(g, pr.get("pika", False) and pika_ready())
+        m = _h3(g, pr.get("pika", False) and pika_ready(), full=_dynamic_unet(pr))
         g.add("FVKeep", model=m["model"], clip=m["clip"], vae=m["vae"], audio_vae=m["avae"])
         return g
     m = _ltx23(g) if pr["engine"] == "ltx23_r8" else _ltx25(g, dev=pr["engine"] == "ltx25_dev")

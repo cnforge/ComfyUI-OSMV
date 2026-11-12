@@ -36,13 +36,27 @@ def _sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", " ".join(text.split())) if s.strip()]
 
 
+CAMERA_MOVES = ["The camera pushes in slowly toward {s}.",
+                "The camera orbits slowly around {s}.",
+                "A handheld camera drifts and sways with the beat, staying on {s}.",
+                "The camera tracks sideways past {s}, keeping them in frame.",
+                "The camera cranes up gently over {s}."]
+
+
+def _camera_move(text: str, sub: str) -> str:
+    """One camera move for a More motion shot, the same one each time for the same text."""
+    return CAMERA_MOVES[sum(map(ord, text)) % len(CAMERA_MOVES)].format(s=sub)
+
+
 def h3(text: str, *, seconds: float, words: str = "", language: str = "English", sung: bool = True,
-       look: bool = False, broll: bool = False, empty: bool = False, audio: str = "vocal") -> str:
+       look: bool = False, broll: bool = False, empty: bool = False, audio: str = "vocal",
+       motion: bool = False) -> str:
     """A MiniMax H3 full-reference prompt for one clip.
     text: the clip's plain description; seconds: its length; words: the lyrics sung in it;
     look: the clip follows the lead's clip (<Video 1>) for pose and timing; broll: a cutaway
     (nobody sings); empty: a cutaway of a place with nobody in it; audio: what <Audio 1> is
-    ("vocal", "drums" or "" for none)."""
+    ("vocal", "drums" or "" for none); motion: More motion, where <Picture 1> is who and where, not
+    a pinned first frame, and the singer and the camera move."""
     sub = "<Subject 1>"
     body = _PERSON.sub(sub, " ".join(text.split()))
     sung = sung and not broll
@@ -55,7 +69,8 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
     defs = [f"{sub} is the place in <Picture 1>: its objects, surfaces and light." if empty else
             f"{sub} is what <Picture 1> shows: its people, place and light." if broll else
             f"{sub} is the person in <Picture 1>: their face, hair, clothes and surroundings.",
-            "<Picture 1> is the first frame of the target video."]
+            f"<Picture 1> shows who {sub} is and where; the shot opens on it, but the pose and framing change freely."
+            if motion else "<Picture 1> is the first frame of the target video."]
     if look:
         defs.append(f"<Video 1> is a clip of another singer; {sub} follows its head movement, pose and timing.")
     if audio == "vocal":
@@ -69,17 +84,23 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
         act = f"the camera moves slowly through {sub}, and only the light and the small details in it move"
     elif broll:
         act = f"{sub} is caught in a candid moment, not singing"
+    elif sung and motion:
+        act = f"{sub} performs the words of <Audio 1> in perfect lip sync, moving with the music while the camera moves"
     elif sung:
         act = f"{sub} sings the words of <Audio 1> in perfect lip sync"
     else:
         act = f"{sub} listens to the music with the lips closed, moving to the beat, not singing"
-    summary = (f"[{' + '.join(kinds)}] A {seconds:.2f}-second music-video shot that starts exactly on <Picture 1>: "
+    summary = (f"[{' + '.join(kinds)}] A {seconds:.2f}-second music-video shot that starts "
+               f"{'from' if motion else 'exactly on'} <Picture 1>: "
                f"{act}." + (" <Audio 1> is reused 1:1 as the complete soundtrack." if audio else ""))
     # retention_analysis
     ret = [f"{sub} (appears in [Shot 1]): fully_preserved - the objects, surfaces, lighting and layout of "
            f"<Picture 1> stay the same throughout." if empty else
+           f"{sub} (appears in [Shot 1]): fully_preserved - the face, identity, hair and clothing of <Picture 1> "
+           f"stay the same throughout; the pose, framing and camera position change." if motion else
            f"{sub} (appears in [Shot 1]): fully_preserved - the face, identity, hair, clothing, lighting and "
            f"setting of <Picture 1> stay the same throughout.",
+           "<Picture 1>: reference - who and where; it is not pinned as a frame." if motion else
            "<Picture 1>: fully_preserved - it is the frame at 0.00 seconds."]
     if look:
         ret.append(f"<Video 1>: reference - only its head movement, pose and timing are followed; the person, "
@@ -88,7 +109,14 @@ def h3(text: str, *, seconds: float, words: str = "", language: str = "English",
         ret.append("<Audio 1>: fully_copy - <Audio 1> is reused 1:1 as the target video's complete final audio track.")
     # detailed_description
     lines = ["The target video is in realistic photographic style.",
-             f"[Shot 1] At 0.00 seconds the shot is exactly <Picture 1>. " + " ".join(_sentences(body))]
+             (f"[Shot 1] The shot opens on {sub} as in <Picture 1>. " if motion else
+              f"[Shot 1] At 0.00 seconds the shot is exactly <Picture 1>. ") + " ".join(_sentences(body))]
+    if motion and broll and not empty:
+        lines.append(f"Everything in {sub} is alive: the people carry on with what they are doing, and cloth, hair, "
+                     f"water, smoke and light move. " + _camera_move(body, sub))
+    elif motion and not empty:
+        lines.append(f"{sub} moves with the whole body, not only the face: the head, shoulders and arms follow the "
+                     f"rhythm, turning and leaning into the strong beats. " + _camera_move(body, sub))
     if sung and words:
         lines.append(f"{sub} (S1), singing in the voice of <Audio 1>, sings <d>[{language}] {words}</d> "
                      f"The lips shape every syllable exactly when it is heard in <Audio 1>, and close between lines.")

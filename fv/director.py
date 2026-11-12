@@ -783,7 +783,7 @@ def _clip_prompt(p: dict, run_dir: str, r: dict, text: str, lead: dict, look: bo
     secs = r["frames"] / float(r["fps"])
     words = lyrics.between(lyr, r["t_start"], r["t_start"] + secs) if sung else ""
     return prompts.h3(text, seconds=secs, words=words, language=(lyr or {}).get("language", "English"),
-                      sung=sung, look=look)
+                      sung=sung, look=look, motion=formats.PRESETS.get(p.get("preset", ""), {}).get("dynamic", False))
 
 
 def _neg(neg: str, lead: dict) -> str:
