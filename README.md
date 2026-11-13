@@ -215,11 +215,12 @@ senators and noblewomen in the arena, the stands and the imperial box, all in pe
 For more control, write it the way the Studio's examples are written: the tone, then the people
 in the order you want them, then the places, then the light.
 
-> A 1980s Florida retirement community, played completely straight and over the top: seniors in
-> their seventies and eighties with big attitude, in velour tracksuits, sun visors, pearls, gold
-> chains and oversized sunglasses, at aqua aerobics in the condo pool, the bingo hall, the
-> shuffleboard court, the early-bird buffet and rows of golf carts; harsh Florida sun and
-> sun-faded pastel colour
+> Tokyo after midnight in the rain, played straight and cinematic like a stylish music video,
+> all invented adults in their twenties and thirties: a lead singer in a long black trench coat
+> and silver rings, a street dancer in an oversized varsity jacket and cargo pants, a DJ in
+> headphones and a bucket hat, a convenience-store clerk in a striped uniform...; a narrow alley
+> of glowing signs and wet pavement, a pedestrian crossing in the rain, a tiny ramen bar, a
+> karaoke booth...; magenta and cyan neon reflected in puddles, soft rain haze, shallow focus
 
 Some things that help:
 
