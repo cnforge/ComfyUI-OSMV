@@ -905,6 +905,28 @@ def _with_note(g: dict, note: str) -> None:
                 ins["prompt"] = ins["prompt"].replace(mark, mark + note[0].upper() + note[1:] + " ", 1)
 
 
+def _swap_line(g: dict, old: str, new: str) -> bool:
+    """A cutaway's description replaced in every prompt of a job (its still and its clip begin with
+    the b-roll line, fv/broll.py); False when the line isn't found there."""
+    old = re.sub(r"\s+", " ", old or "").strip()
+    new = re.sub(r"\s+", " ", new or "").strip()
+    if not old or not new:
+        return False
+    if not new.endswith((".", "!", "?")):
+        new += "."
+    new = new[0].upper() + new[1:]
+    hit = False
+    for n in g.values():
+        ins = n.get("inputs") or {}
+        for k in ("text", "prompt"):
+            t = ins.get(k)
+            if isinstance(t, str) and old in re.sub(r"\s+", " ", t):
+                ins[k] = re.sub(r"\s+", " ", t).replace(old, new) if "\n" not in t else \
+                    "\n".join(re.sub(r"[ \t]+", " ", ln).replace(old, new) for ln in t.split("\n"))
+                hit = True
+    return hit
+
+
 def _set_prefix(g: dict, cls: str, prefix: str) -> None:
     for n in g.values():
         if n.get("class_type") == cls:
@@ -1043,6 +1065,13 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
             r = next((x for x in rs if x.get("role") == "R"), None) or next((x for x in rs if x.get("role") == "A"), None)
         if r is None:
             raise ValueError(f"shot {idx + 1} has no clip to re-shoot")
+        # a note on a cutaway says what it shows instead: its line is replaced in the still and the
+        # clip, and the still is made again (the clip starts on it, so it decides what is seen)
+        bl = r.get("broll") or {}
+        line = bl.get("line") or bl.get("prompt") or ""
+        swap = r.get("role") == "R" and bool(note) and bool(line)
+        if swap:
+            mode = "recast"
         tagbase = f"r{r['id']:03d}{r['role']}"
         jf = _find_job(d, _stem(r.get("path", ""))) or _find_job(d, tagbase)
         if not jf:
@@ -1063,7 +1092,8 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
             sbase = _stem(cur).split("_")[0]
             stag = f"{sbase}_u{k}"
             _set_prefix(gs, "SaveImage", f"{rel}/{stag}")
-            _with_note(gs, note)
+            if not (swap and _swap_line(gs, line, note)):
+                _with_note(gs, note)
             new_still = os.path.join(d, f"{stag}_00001_.png")
             for n in g.values():
                 if n.get("class_type") == "FVLoadImagePath":
@@ -1076,7 +1106,11 @@ def _pickups(name: str, items: list, dry: bool = False) -> dict:
             else:
                 r["portrait"] = new_still
             change["still"] = new_still
-        _with_note(g, note)
+        if not (swap and _swap_line(g, line, note)):
+            _with_note(g, note)
+        if swap:
+            change["line_before"] = line
+            r["broll"] = dict(bl, line=note, prompt=note)
         if not dry:
             json.dump(g, open(os.path.join(d, "jobs", f"pickup{k}_{tag}.json"), "w", encoding="utf-8"), indent=1)
         clips.append(g)
