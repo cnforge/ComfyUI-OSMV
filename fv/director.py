@@ -1046,6 +1046,82 @@ def _long(r: dict) -> bool:
     return r.get("frames", 0) / max(1.0, float(r.get("fps", 25) or 25)) >= 1.6
 
 
+def _keep_better_take(p: dict, r: dict, log=print) -> None:
+    """After a plain re-take (Studio "New take" with no note), the cut keeps whichever take checks
+    better: the re-shoot or the best take before it. A new person/image or a note asked for a
+    change, so that take stays."""
+    ch = next((c for k in reversed(p.get("pickups") or []) if k.get("n") == r.get("pickup")
+               for c in k.get("items") or [] if c.get("render") == r["id"]), None)
+    if not ch or ch.get("mode") != "take" or ch.get("note"):
+        return
+    rank = lambda t: (not t.get("fail"), float(t.get("score", 0.0)))
+    new = next((t for t in r.get("takes") or [] if t.get("path") == r.get("path")), None)
+    old = [t for t in r.get("takes") or [] if t is not new and os.path.isfile(t.get("path") or "")]
+    if not new or not old:
+        return
+    best = max(old, key=rank)
+    if rank(best) > rank(new):
+        r["path_reshoot"] = r["path"]
+        r["path"] = best["path"]
+        log(f"[OneShotMV] r{r['id']:03d}{r['role']}: the re-take checks worse "
+            f"({new.get('score', 0):.2f} vs {best.get('score', 0):.2f}), the cut keeps the take before it")
+
+
+def check_new_takes(run_dir: str, log=print) -> int:
+    """The take check for clips that QC never saw: Studio re-shoots (pickups) put a new take in the
+    cut after the QC passes are over, so the timeline would keep the old take's flags. Each such
+    take is checked like qc_pass does (no re-roll) and added to its render's takes. Returns how
+    many were checked."""
+    from . import qc
+    pj = os.path.join(run_dir, "plan.json")
+    p = json.load(open(pj, encoding="utf-8"))
+    todo = [r for r in p.get("renders", []) if r.get("role") in ("A", "B", "R") and not r.get("unused")
+            and r.get("path") and os.path.isfile(r["path"])
+            and not any(t.get("path") == r["path"] for t in r.get("takes") or [])
+            and (r.get("takes") or r.get("pickup"))]
+    if not todo:
+        return 0
+    voice = p.get("mode", "voice") == "voice"
+    motion = bool(formats.PRESETS.get(p.get("preset"), {}).get("dynamic"))
+    vocal = sr = None
+    vp = os.path.join(run_dir, "vocals.wav")
+    if voice and os.path.exists(vp):
+        vocal, sr = stems.read_wav(vp)
+    refs = []
+    if voice and p.get("artist_path"):
+        try:
+            from . import identity
+            if identity.available():
+                refs = [identity.embed_path(x) if os.path.exists(x) else None
+                        for x in (p.get("artist_paths") or [p["artist_path"]])]
+        except Exception as e:
+            log(f"[OneShotMV] identity check off ({e})")
+    for r in todo:
+        face = {}
+        if voice and r["role"] in ("A", "B"):
+            ref = refs[r.get("character", 0)] if r.get("character", 0) < len(refs) else None
+            face = {"framing": r.get("size", "close") if r["role"] == "A" else "look", "ref": ref,
+                    "key_path": r.get("key") if r["role"] == "B" else None}
+        try:
+            res = qc.check_clip(r["path"], expected_frames=r.get("frames", 0), voice=voice, vocal=vocal,
+                                sr=sr or 44100, seek=r["t_start"] + p["song_t0"] - p.get("stems_t0", 0.0),
+                                sync=voice and r["role"] == "A" and r.get("size", "close") != "wide" and _long(r)
+                                and not r.get("instrumental"), sung=not r.get("instrumental"),
+                                people=not voice, **face)
+        except Exception as e:  # never let QC block a cut
+            res = {"path": r["path"], "ok": True, "fail": [], "score": 0.5, "error": str(e)}
+        if r.get("group") is not None:
+            res["fail"] = [x for x in res.get("fail", []) if x not in ("cut", "drift")]
+            res["ok"] = not res["fail"]
+        res = _motion_sync_pass(res, motion)
+        r.setdefault("takes", []).append({k: v for k, v in res.items() if k != "ok"})
+        _keep_better_take(p, r, log=log)
+        log(f"[OneShotMV] take check r{r['id']:03d}{r['role']} (re-shoot): "
+            + (", ".join(res.get("fail") or []) or "passes"))
+    json.dump(p, open(pj, "w", encoding="utf-8"), indent=1)
+    return len(todo)
+
+
 def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool = True,
             then_assemble: bool = True, queue_rerolls: bool = True, stage: str = "all", log=print) -> dict:
     """Check every render of a run; re-roll the bad ones (new seeds) and queue the next QC pass,

@@ -405,6 +405,11 @@ class FVAssemble:
         _reload()
         import comfy.utils
         pbar = comfy.utils.ProgressBar(100)
+        try:  # re-shot takes get their take check, so the Studio shows their own flags
+            from .fv import director as _fv_director
+            _fv_director.check_new_takes(_resolve(run_dir))
+        except Exception as e:
+            print(f"[OneShotMV] take check of re-shoots skipped ({e})")
         res = fv_assemble.assemble(_resolve(run_dir), fx_intensity=fx_intensity, do_finish=finish,
                                    fx_level=None if audio_fx == "from the run" else audio_fx,
                                    progress=lambda i, n: pbar.update_absolute(int(100 * i / max(1, n)), 100))
