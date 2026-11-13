@@ -331,13 +331,13 @@ def shot_job(film: dict, i: int, seed: int, take: int = 0) -> dict:
     s["prompt"] = prompt_for(film, s)  # a re-shoot gets today's prompt rules (a film planned earlier: its quoted lines)
     g = graphs.ltx_render(vsr=bool(film.get("h3_vsr")), preset=film["preset"], fmt=film["format"], key_path=None,
                           prompt=s["prompt"], negative=NEGATIVE, frames=frames, seed=seed, prefix=f"{film['rel']}/{name}",
-                          size=formats.render_size(film["format"], film["preset"]), sound=True)
+                          size=tuple(film.get("render_wh") or formats.render_size(film["format"], film["preset"])), sound=True)
     return g.nodes
 
 
 def plan(*, script: str, seconds: float, fmt: str, preset: str, seed: int, out_root: str, kind: str = "film",
          style: str = "", song_path: str = "", song_start: float = -1.0, look: str = "none", run_name: str = "",
-         h3_upscale: str = "auto", sound: bool = True, one_shot: bool = False, log=print) -> dict:
+         h3_upscale: str = "auto", sound: bool = True, one_shot: bool = False, draft: bool = False, log=print) -> dict:
     """Write the shot list and save film.json; returns the film (its jobs under "jobs")."""
     t = time.time()
     seconds = float(max(5.0, min(300.0, seconds)))
@@ -359,7 +359,8 @@ def plan(*, script: str, seconds: float, fmt: str, preset: str, seed: int, out_r
             "rel": os.path.relpath(d, out_root).replace(os.sep, "/"), "title": spec["title"], "cast": spec["cast"],
             "look": spec["look"], "llm": spec.get("raw"), "song": song_path, "song_start": 0.0, "tempo": 0.0,
             "one_shot": bool(one_shot), "note": note,
-            "h3_vsr": formats.engine_of(preset) == "h3" and h3_upscale == "relayvsr" and graphs.relayvsr_ready(),
+            "h3_vsr": formats.engine_of(preset) == "h3" and h3_upscale == "relayvsr" and graphs.relayvsr_ready() and not draft,
+            **({"draft": True, "render_wh": list(formats.draft_size(fmt, preset))} if draft else {}),
             "created": time.strftime("%Y-%m-%dT%H:%M")}
     beats = None
     if song_path:

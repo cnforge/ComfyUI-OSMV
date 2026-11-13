@@ -364,6 +364,16 @@ def _progress(pid: str, rec: dict) -> dict:
 
 
 # ------------------------------------------------------------------ start, job, recut, cancel
+def _node_has(node: str, name: str) -> bool:
+    """Whether the loaded node has this input (ComfyUI restarted since the update)."""
+    try:
+        import nodes as comfy_nodes  # type: ignore
+        it = comfy_nodes.NODE_CLASS_MAPPINGS[node].INPUT_TYPES()
+        return name in it.get("required", {}) or name in it.get("optional", {})
+    except Exception:
+        return False
+
+
 def _director_has(name: str) -> bool:
     """Whether the loaded Director node has this input (a ComfyUI that hasn't restarted since an
     update still runs the old node)."""
@@ -417,6 +427,8 @@ def _director_graph(b: dict) -> dict:
         d["h3_upscale"] = "relayvsr"
     if b.get("image_model") == "h3_image" and _director_has("image_model"):  # the stills on MiniMax H3 Image
         d["image_model"] = "h3_image"
+    if b.get("draft") and _director_has("draft"):  # a small draft render first
+        d["draft"] = True
     if (b.get("broll_prompts") or "").strip() and _director_has("broll_prompts"):  # the user's own cutaways
         d["broll_prompts"] = b["broll_prompts"].strip()
     if (b.get("direction") or "").strip() and _director_has("direction"):  # notes per part of the song
@@ -718,6 +730,9 @@ def _run(name: str) -> dict:
         pass
     started = tm.get("queued")
     keys = " ".join(tm.keys())
+    n_retakes = len(glob.glob(os.path.join(d, "r*_t[0-9]*.mp4")))
+    looks_all = [x for x in p.get("renders", []) if x.get("role") == "B" and not x.get("unused")]
+    looks_done = sum(os.path.isfile(x.get("path") or "") for x in looks_all)
     if done:
         stage = "done"
     elif not started:
@@ -744,7 +759,12 @@ def _run(name: str) -> dict:
             st_["meta"] = f"{n_stills} of {len(shots)} made"
         if st_["id"] == "clips":
             st_["meta"] = f"{n_clips} of {n_sing} sung"
+        if st_["id"] == "takes" and (n_retakes or looks_all):
+            st_["meta"] = ", ".join(x for x in (f"{n_retakes} re-takes" if n_retakes else "",
+                                                f"{looks_done} of {len(looks_all)} looks" if looks_all else "") if x)
     weights = {"plan": 3, "stills": 12, "check": 5, "clips": 55, "takes": 15, "broll": 5, "edit": 5}
+    # the take check runs for hours on a long run (re-takes, then the looks made from the kept
+    # leads): its share moves with the clips made against those still in the queue
     if stage == "done":
         pct = 100
     elif stage == "preview":
@@ -755,6 +775,9 @@ def _run(name: str) -> dict:
             pct += weights["stills"] * n_stills / max(1, len(shots))
         if stage == "clips":
             pct += weights["clips"] * n_clips / max(1, n_sing)
+        if stage == "takes":
+            made = n_retakes + looks_done
+            pct += weights["takes"] * made / max(1, made + queued_jobs)
         pct = int(min(99, pct))
     elapsed = 0.0
     if started:
@@ -774,7 +797,7 @@ def _run(name: str) -> dict:
         "run": os.path.basename(d), "project": _project(d), "stage": stage, "stages": stages, "pct": pct,
         "elapsed_min": round(elapsed, 1), "estimate_min": round(est), "left_min": 0 if done else round(max(0.0, est - elapsed)),
         "queued_jobs": queued_jobs, "now": now_job, "stalled": bool(started and not done and queued_jobs == 0),
-        "brief": {"format": p.get("format"), "preset": p.get("preset"), "seconds": round(float(p.get("duration") or 0), 1), "t0": round(float(p.get("song_t0") or 0), 2),
+        "brief": {"format": p.get("format"), "preset": p.get("preset"), "draft": bool(p.get("draft")), "render_wh": p.get("render_wh"), "seconds": round(float(p.get("duration") or 0), 1), "t0": round(float(p.get("song_t0") or 0), 2),
                   "from": _clock(p.get("song_t0", 0)), "to": _clock(p.get("song_t1", 0)), "tempo": p.get("tempo"),
                   "fx": p.get("fx_level") or "subtle", "cuts": p.get("cuts") or {}, "seed": p.get("seed"),
                   "crowd": p.get("crowd", "auto"), "cast_order": p.get("cast_order", "as written")},
@@ -932,7 +955,7 @@ def _edit_brief(d: str) -> dict | None:
          "broll_style": ins.get("broll_style"), "qc": ins.get("qc_retries"), "fx": ins.get("audio_fx"),
          "cast_order": ins.get("cast_order"), "crowd": ins.get("crowd"), "models": ins.get("models"),
          "refine": bool(ins.get("refine_details")), "h3_upscale": ins.get("h3_upscale") or "auto",
-         "image_model": ins.get("image_model") or "krea", "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
+         "image_model": ins.get("image_model") or "krea", "draft": bool(ins.get("draft")), "engine": "h3" if ins.get("engine") == "minimax-h3" else "ltx25",
          "characters": [rel(x) for x in (ins.get("artist_image_path") or "").split("|") if x]}
     for k in ("cuts_low", "cuts_medium", "cuts_high"):
         b[k] = ins.get(k)
@@ -1601,6 +1624,7 @@ async def _api(request: web.Request, route: str) -> web.Response:
                    "h3_upscale": "relayvsr" if body.get("h3_upscale") == "relayvsr" else "auto",
                    "sound": bool(body.get("sound", True)), "resolution": str(int(body.get("resolution") or 1080)),
                    "shots": "one shot" if body.get("shots") == "one" else "cuts",
+                   **({"draft": True} if body.get("draft") and _node_has("FVFilm", "draft") else {}),
                    "run_name": (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] + "-" + _dt.datetime.now().strftime("%Y%m%d-%H%M")) if name else ""}
             pid = await _blocking(_queue_graph, {"1": {"class_type": "FVFilm", "inputs": inp}})
             return web.json_response({"prompt_id": pid})

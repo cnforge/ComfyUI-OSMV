@@ -245,6 +245,10 @@ class FVDirector:
                                "tooltip": "LTX-2.5 at Quality, Max or Ultra: after the take checks, every clip in the cut is "
                                           "re-rendered with Lightricks' Refine-Details IC-LoRA (tiled, 8 steps) for "
                                           "sharper texture, edges and grain. Adds time to every clip."}),
+            "draft": ("BOOLEAN", {"default": False,
+                      "tooltip": "A draft: the chosen model and tier at a small size (960x544 on MiniMax H3, Fast's size "
+                                 "on LTX-2.5), no RelayVSR or refine, to check the cast, shots and motion before the full "
+                                 "render. The same seed gives the same stills and prompts."}),
             "broll_prompts": ("STRING", {"default": "", "multiline": True,
                               "tooltip": "Your own b-roll cutaways, one per line (a product shot, a detail, a place): used "
                                          "in order for every cutaway slot (again from the top when there are more slots "
@@ -346,7 +350,7 @@ class FVDirector:
             framing="mixed", artist_image_path="", qc_retries=2, artist_image=None, dance_video=None, theme="", broll_share=0.125, broll_style="mix",
             staged=True, look_groups=False, cuts_low=None, cuts_medium=None, cuts_high=None, audio_fx="subtle",
             cast_order="as written", crowd="auto", models="auto", fps="auto", resolution="1080", engine="ltx-2.5",
-            direction="", refine_details=False, h3_upscale="auto", image_model="krea", broll_prompts=""):
+            direction="", refine_details=False, h3_upscale="auto", image_model="krea", broll_prompts="", draft=False):
         _reload()
         if artist_image is not None:
             artist_image_path = _save_image_input(artist_image)
@@ -368,7 +372,7 @@ class FVDirector:
                               fps=0.0 if fps in (None, "", "auto") else float(fps), resolution=int(resolution or 1080),
                               engine="h3" if engine == "minimax-h3" else "ltx25", direction=direction or "",
                               refine=bool(refine_details), h3_upscale=h3_upscale or "auto",
-                              image_model=image_model or "krea", broll_prompts=broll_prompts or "")
+                              image_model=image_model or "krea", broll_prompts=broll_prompts or "", draft=bool(draft))
         ui = {"text": [res["summary"]]}
         ui["text"].append(_file_ref(res["bundle"]))  # jobs.json as a job output (SDK clients)
         return {"ui": ui, "result": (res["summary"], res["run_dir"])}
@@ -878,7 +882,8 @@ class FVFilm:
                              "sound": ("BOOLEAN", {"default": True, "tooltip": "Without a song: keep the sound each shot was made with"}),
                              "resolution": (["720", "1080", "1440", "2160"], {"default": "1080"}),
                              "run_name": ("STRING", {"default": ""}),
-                             "shots": (["cuts", "one shot"], {"default": "cuts", "tooltip": "one shot: a single continuous take, no edit (at most 15 s on H3, 20 s on LTX)"})}}
+                             "shots": (["cuts", "one shot"], {"default": "cuts", "tooltip": "one shot: a single continuous take, no edit (at most 15 s on H3, 20 s on LTX)"}),
+                             "draft": ("BOOLEAN", {"default": False, "tooltip": "A draft at a small size (960x544 on MiniMax H3, Fast's size on LTX-2.5) with the same model, to check the shots before the full render"})}}
 
     @classmethod
     def IS_CHANGED(cls, **kw):
@@ -891,13 +896,13 @@ class FVFilm:
     CATEGORY = CATEGORY
 
     def run(self, script, kind, seconds, format, preset, seed, queue_renders, style="", song="", song_start=-1.0,
-            look="none", h3_upscale="auto", sound=True, resolution="1080", run_name="", shots="cuts"):
+            look="none", h3_upscale="auto", sound=True, resolution="1080", run_name="", shots="cuts", draft=False):
         _reload()
         song_path = _resolve(os.path.join(folder_paths.get_input_directory(), song)) if song else ""
         film = fv_film.plan(script=script, seconds=seconds, fmt=format, preset=preset, seed=seed,
                             out_root=folder_paths.get_output_directory(), kind=kind, style=style, song_path=song_path,
                             song_start=song_start, look=look, run_name=run_name, h3_upscale=h3_upscale, sound=sound,
-                            one_shot=shots == "one shot")
+                            one_shot=shots == "one shot", draft=bool(draft))
         film["resolution"] = int(resolution or 1080)
         if queue_renders:
             ids = [director.queue_prompt(j["graph"]) for j in film["jobs"]]

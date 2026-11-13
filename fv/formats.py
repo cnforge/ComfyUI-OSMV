@@ -36,6 +36,20 @@ for _k, _f in FORMATS.items():
 LEGACY_SIZES = {"16:9": {"quality": (1280, 768), "max": (1280, 768), "ultra": (1280, 768), "h3": (1344, 768)},
                 "9:16": {"quality": (768, 1280), "max": (768, 1280), "ultra": (768, 1280), "h3": (768, 1344)},
                 "1:1": {"quality": (1024, 1024), "max": (1024, 1024), "ultra": (1024, 1024), "h3": (768, 768)}}
+# Draft: the run's own model and tier at a small size, to check the cast, the shots and the motion
+# before the full render (same seed: the full run starts from the same stills and prompts). H3
+# renders it straight at this size (below its native size: no lift, no upscaler); LTX's two stages
+# need a stage 1 in multiples of 64, so it drafts at Fast's size.
+H3_DRAFT = {"16:9": (960, 544), "9:16": (544, 960), "1:1": (640, 640)}
+
+
+def draft_size(fmt: str, preset: str) -> tuple[int, int]:
+    """The clips' size in a draft run of this preset."""
+    if PRESETS[preset]["engine"] == "h3":
+        return H3_DRAFT[fmt]
+    return FORMATS[fmt]["fast"]
+
+
 HIRES_MIN_GB = 40  # 1080p Quality needs this much GPU memory; smaller cards render at LEGACY_SIZES
 FORMAT_NAMES = list(FORMATS)  # 16:9 first: the default
 

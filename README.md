@@ -288,6 +288,7 @@ opening shot and never two in a row. On the node, the input is `broll_prompts`.
 | Cast order | as written, mixed | as written |
 | Crowd behind singers | auto, on, off | auto |
 | B-roll share | 0 to 0.5 of the shots (Studio: none, 1 in 8, 1 in 4, 1 in 2) | 0.125 |
+| Render | full, draft (the same model and quality at 960×544 on MiniMax H3 or Fast's size on LTX-2.5, no RelayVSR or refine; check a run, then render it again on full with the same seed) | full |
 | B-roll lines | your own cutaways, one per line ([B-roll](#b-roll)) | empty: from the World |
 | Take-check rounds | 0 to 3 | 2 |
 | Seed | any number | 1 |

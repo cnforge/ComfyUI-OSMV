@@ -523,7 +523,7 @@ const LEVEL_COL = {low:"var(--low)", medium:"var(--mid)", high:"var(--high)"};
 const PARTS = {intro:"Opening", verse:"Verse", build:"Pre-chorus", chorus:"Chorus", break:"Bridge", final:"Final chorus", outro:"Outro"};
 const DEFAULT_BRIEF = {name:"", song:"", characters:[], theme:"", world:"custom", seconds:30, start:-1, format:"16:9", preset:"quality", fx:"subtle",
   cuts_low:"every 2 bars", cuts_medium:"every bar", cuts_high:"to the music (subtle)", crowd:"auto", cast_order:"as written", seed:1, broll:0.125, qc:2, models:"auto",
-  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", broll_prompts:"", refine:false, h3_upscale:"auto", image_model:"krea"};
+  looks:"auto", framing:"mixed", broll_style:"mix", fps:25, resolution:1080, engine:"ltx25", direction:"", broll_prompts:"", draft:false, refine:false, h3_upscale:"auto", image_model:"krea"};
 
 // ---------------------------------------------------------------- state
 const store = {
@@ -690,8 +690,8 @@ const dur = s => { s = Math.max(0, Math.round(s)); if (s < 90) return s + " s"; 
 // minutes for the run: H3 is a bigger model, and its clips are at least 4.5 s each
 function estimate(b){ const sec = +b.seconds > 0 ? +b.seconds : (S.analysis ? S.analysis.duration : 30);
   const per = b.engine === "h3" ? ({fast: 2, pika: 4, dynamic: 11, singularity: 11}[b.preset] || 5) : ({ultra: 7.8, max: 2.2, quality: 0.6, fast: 0.25}[b.preset] || 1);
-  const refine = b.refine && b.engine !== "h3" && b.preset !== "fast" ? REFINE_PER_S : 0;
-  return 6 + (per + refine) * sec; }
+  const refine = b.refine && b.engine !== "h3" && b.preset !== "fast" && !b.draft ? REFINE_PER_S : 0;
+  return 6 + (per * (b.draft && b.preset !== "fast" ? 0.35 : 1) + refine) * sec; }
 // minutes of Refine-Details pass per second of video: 81 s for a 65-frame 1152x1920 clip, and a cut renders
 // 1.75 to 2.4 s of clips (lead-ins and looks) per second of video
 const REFINE_PER_S = 1.2;
@@ -869,6 +869,8 @@ async function viewBrief(){
       <p class="tiny" id="imgnote" style="margin:4px 0 0"></p>
       <div class="orow outrow"><span>Frame rate</span><div class="seg mini" role="group" aria-label="Frame rate" id="fpss"></div></div>
       <div class="orow"><span>Size</span><div class="seg mini" role="group" aria-label="Size" id="ress"></div></div>
+      <div class="orow outrow"><span>Render</span><div class="seg mini" role="group" aria-label="Draft or full" id="drafts"></div></div>
+      <p class="tiny" id="draftnote" style="margin:4px 0 0"></p>
       <p class="tiny" style="margin:8px 0 0" id="etanote"></p>
     </section>
     <section class="card">
@@ -961,6 +963,11 @@ async function viewBrief(){
     $("#imgnote").textContent = im === "h3_image"
       ? "The portraits, the b-roll stills and the edits of your character photos are made by MiniMax H3 Image at about 4 MP: more detail and better text, slower than Krea 2."
       : "The portraits and b-roll stills are made by Krea 2, and character photos are edited with Qwen-Image 2.1.";
+    const dr = !!b.draft;
+    $("#drafts").innerHTML = [["full","Full"],["draft","Draft"]].map(([k, n]) => `<button type="button" class="opt" data-v="${k}" aria-pressed="${dr === (k === "draft")}">${n}</button>`).join("");
+    $("#drafts").querySelectorAll(".opt").forEach(el => el.onclick = () => { b.draft = el.dataset.v === "draft"; saveBrief(); drawTiers(); refreshEstimate(); });
+    const dsz = eng === "h3" ? {"16:9": "960×544", "9:16": "544×960", "1:1": "640×640"}[b.format] || "960×544" : (rs.fast[b.format] || rs.fast["16:9"]);
+    $("#draftnote").textContent = dr ? `Draft: the clips render at ${dsz} with the model and quality above (no RelayVSR or refine), to check the cast, shots and motion. Run it again on Full with the same seed for the final.` : "";
     const f = rs.quality[b.format] ? b.format : "16:9";
     const t = eng === "h3"
       ? [["quality","Quality",rs.quality[f],"MiniMax H3 at 1080p, 24 fps: rendered at its native size, then lifted with its latent upscaler. Your vocal copied 1:1, the lyrics in every prompt. The slowest."],
@@ -1784,7 +1791,7 @@ function wsVideoTab(){
       ${w.light && w.light.length ? `<dt>Light</dt><dd>${esc(w.light.slice(0, 4).join(" · "))}</dd>` : ""}</dl></div>
   ${cs.length ? `<div class="psec"><div class="plbl">Cast <span>${cs.length}</span></div><div class="cast">${cs.map((c, i) => { const k = r.shots.filter(s => s.char === i).length;
     return `<button type="button" class="av" data-char="${i}" style="--c:${CAST_C[i % CAST_C.length]};background-image:url('${esc(inputView(c))}')" title="${esc(c)} · ${k} shot${k === 1 ? "" : "s"}${k ? ": click for the next one" : ""}"><span class="ct">${k}</span></button>`; }).join("")}</div></div>` : ""}
-  <div class="psec"><div class="plbl">Output</div><div class="tags">${[r.brief.format, presetName(r.brief.preset), b.fps && b.fps + " fps", b.resolution && b.resolution + "p", b.refine && "Refine", "seed " + r.brief.seed].filter(Boolean).map((x, i) => `<span class="tg${i < 2 ? " ac" : ""}">${esc(x)}</span>`).join("")}</div></div>
+  <div class="psec"><div class="plbl">Output</div><div class="tags">${[r.brief.format, presetName(r.brief.preset), r.brief.draft && "draft " + (r.brief.render_wh || []).join("×"), b.fps && b.fps + " fps", b.resolution && b.resolution + "p", b.refine && "Refine", "seed " + r.brief.seed].filter(Boolean).map((x, i) => `<span class="tg${i < 2 ? " ac" : ""}">${esc(x)}</span>`).join("")}</div></div>
   ${r.notes.length || W.ph !== "plan" ? `<div class="psec"><div class="plbl">Checks</div><ul class="notes">${r.notes.length ? r.notes.map(x => `<li><i aria-hidden="true" style="color:${(icon[x.kind] || ["·", "var(--muted)"])[1]}">${(icon[x.kind] || ["·"])[0]}</i><span>${esc(x.text)}</span></li>`).join("")
     : `<li><i aria-hidden="true" class="muted">·</i><span class="muted">The vision check looks at every still before any clip is made; the take check scores every clip's lip sync.</span></li>`}</ul></div>` : ""}
   ${W.ph === "plan" && (r.energy_map || []).length ? `<div class="psec"><div class="plbl">Energy</div><ul class="notes">${r.energy_map.map(x => `<li><i class="muted">·</i><span>${esc(x)}</span></li>`).join("")}</ul></div>` : ""}
@@ -1942,7 +1949,7 @@ function wsFinish(body){
 // A commercial or short film from a script: Gemma writes a cast, a look and a shot list, every shot
 // is text to video, and the cut lays the music (cut on its beats) or the shots' own sound.
 const DEFAULT_FILM = {name: "", kind: "commercial", shots: "cuts", script: "", style: "", seconds: 30, format: "16:9", preset: "quality",
-  h3_upscale: "auto", resolution: 1080, look: "none", music: "sound", song: "", seed: 1, mkstyle: "", mkinst: true};
+  h3_upscale: "auto", resolution: 1080, draft: false, look: "none", music: "sound", song: "", seed: 1, mkstyle: "", mkinst: true};
 const FILM_MODELS = [["quality","LTX-2.5 Quality"],["fast","LTX-2.5 Fast"],["max","LTX-2.5 Max"],["ultra","LTX-2.5 Ultra"],
   ["h3","MiniMax H3"],["h3_fast","MiniMax H3 Fast"],["h3_pika","MiniMax H3 Pika"],["h3_dynamic","MiniMax H3 More motion"],["h3_singularity","MiniMax H3 Singularity"]];
 const FILM_KINDS = [["commercial","Commercial"],["film","Short film"],["trailer","Trailer"],["documentary","Documentary"]];
@@ -1975,6 +1982,8 @@ async function viewFilmBrief(){
       <div class="flabel">Model</div>${segHtml("fmodel", FILM_MODELS, f.preset)}
       <div id="fh3" style="margin-top:10px"><label class="orow" style="display:flex;gap:10px;align-items:center"><span class="muted" style="font-size:12.5px">Upscale (MiniMax H3)</span><select id="fh3up" style="width:auto"><option value="auto">SelfLift</option><option value="relayvsr">RelayVSR 2x</option></select></label></div>
       <div class="flabel">Size</div>${segHtml("fres", [[720,"720p"],[1080,"1080p"],[1440,"1440p"],[2160,"4K"]], f.resolution)}
+      <div class="flabel">Render</div>${segHtml("fdraft", [["full","Full"],["draft","Draft"]], f.draft ? "draft" : "full")}
+      <p class="tiny muted" style="margin:4px 0 0">Draft renders every shot small (960×544 on MiniMax H3, Fast's size on LTX-2.5) with the same model, to check the shots before the full render.</p>
       <div class="row" style="gap:16px;margin-top:14px;align-items:flex-end">
         <label class="field" style="min-width:220px">Grade<select id="flook"></select></label>
         <label class="field" style="width:140px">Seed<input id="fseed" type="number" min="0" step="1"></label></div>
@@ -1991,6 +2000,8 @@ async function viewFilmBrief(){
   const shotsNote = () => { const cap = f.preset.startsWith("h3") ? 15 : 20;
     $("#fshotsnote").textContent = (f.shots || "cuts") === "one" ? `One continuous take, the camera never cuts: ${cap} s at most on this model, so keep the brief to one place and a few lines.` : "Planned as a series of shots and edited together."; };
   seg("fkind", "kind"); seg("fshots", "shots", false, shotsNote); seg("ffmt", "format"); seg("fmodel", "preset", false, () => { h3(); shotsNote(); }); shotsNote(); seg("fres", "resolution", true);
+  $("#fdraft").querySelectorAll(".opt[data-v]").forEach(el => el.onclick = () => { f.draft = el.dataset.v === "draft"; save();
+    $("#fdraft").querySelectorAll(".opt[data-v]").forEach(o => o.setAttribute("aria-pressed", o === el)); });
   seg("flen", "seconds", true, () => { $("#flencust").value = ""; });
   seg("fmusic", "music", false, drawMusic);
   const lc = $("#flencust"); if (![15,30,60,90].includes(+f.seconds)) lc.value = f.seconds;
@@ -2044,7 +2055,7 @@ async function viewFilmBrief(){
     try{
       const r = await realApi("film", {name: f.name, kind: f.kind, script: f.script, style: f.style, seconds: f.seconds, format: f.format,
         preset: f.preset, h3_upscale: f.h3_upscale, resolution: f.resolution, look: f.look, song, song_start: -1,
-        sound: f.music !== "none", seed: f.seed, shots: f.shots || "cuts"});
+        sound: f.music !== "none", seed: f.seed, shots: f.shots || "cuts", draft: !!f.draft});
       for (;;){
         await new Promise(res => setTimeout(res, 2000));
         const j = await realApi("job/" + r.prompt_id);

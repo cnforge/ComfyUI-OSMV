@@ -150,7 +150,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
            look_groups: bool = False, cuts: dict | None = None, audio_fx: str = "",
            cast_order: str = "as written", crowd: str = "auto", log=print, fps: float = 0.0, resolution: int = 1080,
            lip_repair: bool = False, models: str = "auto", engine: str = "ltx25", direction: str = "",
-           refine: bool = False, h3_upscale: str = "auto", image_model: str = "krea", broll_prompts: str = "") -> dict:  # lip_repair: accepted and ignored, so older callers
+           refine: bool = False, h3_upscale: str = "auto", image_model: str = "krea", broll_prompts: str = "", draft: bool = False) -> dict:  # lip_repair: accepted and ignored, so older callers
     # (an old nodes.py still loaded in a ComfyUI that has not restarted) still work
     """staged (voice runs queued here, with QC): the 4-load order. Krea makes every portrait and
     the b-roll candidate stills; LTX makes every singer clip and the b-roll clips, and QC
@@ -279,6 +279,11 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
     rsize = formats.render_size(fmt, preset)
     if 0 < graphs.vram_gb() < formats.HIRES_MIN_GB:  # 1080p Quality is for 48 GB+ cards
         rsize = formats.LEGACY_SIZES[fmt].get(preset, rsize)
+    if draft:  # a draft: the same model and tier at a small size (formats.draft_size), no RelayVSR or refine
+        rsize = formats.draft_size(fmt, preset)
+        p["draft"] = True
+        p.pop("h3_vsr", None)
+        log(f"[OneShotMV] draft: clips at {rsize[0]}x{rsize[1]}")
     p["render_wh"] = list(rsize)  # re-cuts and re-shoots keep this size
     log(f"[OneShotMV] {mode} plan: {len(p['renders'])} renders, window {p['song_t0']:.2f}-{p['song_t1']:.2f}s, "
         f"tempo {p['tempo']}")
@@ -524,7 +529,7 @@ def direct(*, audio: np.ndarray, sr: int, out_root: str, mode: str = "voice", pa
                                        if n in p["critic"]["later"]]
         p["timing"] = {"queued": _dt.datetime.now().isoformat(timespec="seconds")}
     p["models"] = model_set
-    if refine and p.get("engine") != "h3" and label != "fast" and use_qc:
+    if refine and p.get("engine") != "h3" and label != "fast" and use_qc and not p.get("draft"):
         if graphs.refine_ready():
             p["refine"] = True
         else:
@@ -1020,6 +1025,19 @@ def _refresh_prompt(g: dict) -> None:
 
 
 SYNC_TRUST = 2.5  # SyncNet confidence from which a take's measured offset is used
+# More motion / Singularity: the head and camera move, so SyncNet reads lower on takes that look
+# right. From this confidence a take that fails only on lip sync passes there.
+SYNC_MOTION_CONF = 3.0
+
+
+def _motion_sync_pass(res: dict, motion: bool) -> dict:
+    """A take that fails only on lip sync passes on a More motion run when SyncNet still finds the
+    mouth in time with a moderate confidence."""
+    from . import qc
+    if motion and list(res.get("fail") or []) == ["sync"] and res.get("sync_conf", 0.0) >= SYNC_MOTION_CONF \
+            and abs(res.get("sync_offset", 0)) <= qc.THRESH["sync_offset"]:
+        res = dict(res, fail=[], ok=True, sync_lenient=True)
+    return res
 
 
 def _long(r: dict) -> bool:
@@ -1057,6 +1075,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
     tm = p.setdefault("timing", {})
     tm[f"qc_{stage}_{pass_idx}"] = _dt.datetime.now().isoformat(timespec="seconds")
     voice = p.get("mode", "voice") == "voice"
+    motion = bool(formats.PRESETS.get(p.get("preset"), {}).get("dynamic"))
     vocal = sr = None
     vp = os.path.join(run_dir, "vocals.wav")
     if voice and os.path.exists(vp):
@@ -1090,7 +1109,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
         done = next((t for t in takes if t.get("path") == r.get("path") and t.get("v", 0) >= qc.VERSION
                      and os.path.exists(t["path"])), None)
         if done is not None:  # checked in an earlier pass: keep its verdict
-            res = dict(done, ok=not done.get("fail"))
+            res = _motion_sync_pass(dict(done, ok=not done.get("fail")), motion)
             report.append({"id": r["id"], "role": r["role"], **res})
             if not res["ok"]:
                 redo.append(r)
@@ -1108,6 +1127,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
             # and its face sizes step from person to person
             res["fail"] = [f for f in res["fail"] if f not in ("cut", "drift")]
             res["ok"] = not res["fail"]
+        res = _motion_sync_pass(res, motion)
         entry = {k: v for k, v in res.items() if k != "ok"}
         for t in takes:  # a re-check (new checks, e.g. `cut`) replaces the old verdict on a take
             if t["path"] == res["path"]:
@@ -1137,6 +1157,11 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
         if r["id"] in redo_ids:
             continue
         if r.get("group") is not None:  # a look group isn't re-rolled: a bad look stays out of the cut
+            continue
+        # lip sync alone gets one re-roll: on a real run a second one rescued 1 shot in 18 and took
+        # as long as the first round of takes. The best take is kept.
+        t = next((x for x in report if x["id"] == r["id"]), {})
+        if set(t.get("fail") or []) == {"sync"} and len(r.get("takes") or []) >= 2:
             continue
         # a re-rolled lead clip invalidates its pose-matched twins: re-render them on the new lead
         # (staged runs make the looks after their lead is final)
@@ -1296,7 +1321,7 @@ def qc_pass(run_dir: str, *, pass_idx: int = 0, max_passes: int = 1, queue: bool
         msg = f"QC pass {pass_idx}: re-rolling {len(redo)} take(s): " + ", ".join(
             f"r{r['id']:03d}{r['role']}" for r in redo) + \
             (f"; {len(fb_clips)} group looks get their own clip" if fb_clips else "") + \
-            (f" ({skipped} more over the re-render budget)" if skipped else "")
+            (f" ({skipped} more kept as they are: lip sync already re-rolled, or over the re-render budget)" if skipped else "")
     else:
         # best take of each shot: leads first, so each look then picks among the takes made from
         # the lead take that is kept (otherwise a lead can keep its first re-roll while its looks
