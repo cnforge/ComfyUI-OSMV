@@ -232,7 +232,12 @@ main.ws{max-width:none;padding:0;height:calc(100vh - 53px);display:grid;grid-tem
 .wmid{display:grid;grid-template-columns:minmax(0,1fr) 360px;min-height:0}
 .viewer{display:flex;flex-direction:column;min-height:0;min-width:0;background:radial-gradient(ellipse at 50% 30%,#16181c 0,var(--bg) 70%)}
 .screen{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:16px;position:relative;container-type:size}
-.screen > video{max-width:100%;max-height:100%;border-radius:8px;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.55);display:block;cursor:pointer}
+.screen > video{border-radius:8px;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.55);display:block;cursor:pointer;flex:none;margin:auto}
+/* Fit fills the viewer at the video's shape, larger or smaller than its file; a percentage is that
+   share of the file's own pixels and scrolls when it is larger than the viewer */
+.screen > video.fit{width:min(100cqw,calc(100cqh * var(--var,var(--ar))));height:auto}
+.screen.scaled{overflow:auto;justify-content:flex-start;align-items:flex-start}
+.vscale{width:auto;min-height:28px;padding:0 28px 0 9px;font-size:12px;font-weight:600;border-radius:8px;background-color:var(--panel2);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%}
 /* before there is a cut: the shot under the playhead, its clip, its still or what the plan says */
 .frame{width:min(100cqw,calc(100cqh * var(--ar)));aspect-ratio:var(--ar);border-radius:8px;overflow:hidden;background:var(--panel);border:1px solid var(--line2);box-shadow:0 20px 60px rgba(0,0,0,.55);position:relative;cursor:pointer}
 .frame img,.frame video{width:100%;height:100%;object-fit:cover;display:block}
@@ -1431,6 +1436,7 @@ async function viewRun(run){
         <button class="ibtn big" id="tplay" type="button" title="Play (Space)" aria-label="Play"></button>
         <button class="ibtn" id="tnext" type="button" title="Next shot (→)" aria-label="Next shot"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 3h2v10h-2zM2 3v10l8-5z"/></svg></button>
         <span class="clock" id="tclock"></span><span class="grow"></span>
+        ${r.video ? `<select class="vscale" id="vscale" aria-label="Viewer size" title="Viewer size">${VSCALES.map(([v, l]) => `<option value="${v}"${String(store.get("vscale", "fit")) === v ? " selected" : ""}>${l}</option>`).join("")}</select>` : ""}
         <div class="seg mini" role="group" aria-label="Versions" id="vers"></div>
         ${r.shots.some(flagged) ? `<button class="toggle" id="tweak" type="button" aria-pressed="false" title="Show only the shots the take check flagged (W)"><span class="dot"></span>Flagged · ${r.shots.filter(flagged).length}</button>` : ""}
       </div></section>
@@ -1473,8 +1479,24 @@ function wsMedia(){
     W.frameN = null;
     $("#frame").onclick = wsToggle;
   }
-  if (W.media && W.media.tagName === "VIDEO") W.media.onclick = wsToggle;
+  if (W.media && W.media.tagName === "VIDEO"){
+    W.media.onclick = wsToggle;
+    W.media.addEventListener("loadedmetadata", wsScale);
+    wsScale();
+  }
   $("#tplay").disabled = !W.media;
+}
+// the viewer's size: Fit (fills the viewer) or a share of the cut's own pixels
+const VSCALES = [["fit", "Fit"], ["0.25", "25%"], ["0.5", "50%"], ["0.75", "75%"], ["1", "100%"], ["2", "200%"]];
+function wsScale(){
+  const v = $("#wv"), scr = $("#screen");
+  if (!v || !scr) return;
+  const k = String(store.get("vscale", "fit"));
+  const fit = k === "fit" || !(+k > 0);
+  if (v.videoWidth && v.videoHeight) scr.style.setProperty("--var", v.videoWidth / v.videoHeight);
+  v.classList.toggle("fit", fit);
+  scr.classList.toggle("scaled", !fit);
+  v.style.width = fit || !v.videoWidth ? "" : Math.round(v.videoWidth * +k) + "px";
 }
 const wsToggle = () => { const m = S.ws && S.ws.media; if (!m) return; if (m.paused){ if (S.ws.now() >= S.ws.D - .05) S.ws.seek(0); m.play(); } else m.pause(); };
 // the shot under the playhead, in the viewer when there is no cut to play
@@ -1676,6 +1698,7 @@ function wsBind(){
   $("#tprev").onclick = () => wsPick(W.sel - 1);
   $("#tnext").onclick = () => wsPick(W.sel + 1);
   if ($("#tweak")) $("#tweak").onclick = () => { W.weak = !W.weak; $("#tweak").setAttribute("aria-pressed", W.weak); wsMarks(); };
+  if ($("#vscale")) $("#vscale").onchange = e => { store.set("vscale", e.target.value); wsScale(); e.target.blur(); };
   $("#tzoom").oninput = e => { const sc = $("#tscroll"), mid = (sc.scrollLeft + sc.clientWidth / 2) / wsPps(); W.zoom = +e.target.value; wsLayout(); sc.scrollLeft = mid * wsPps() - sc.clientWidth / 2; };
   $("#tscroll").addEventListener("wheel", () => { W.follow = false; }, {passive: true});
   // click or drag on the ruler, the parts or the waveform to scrub
